@@ -1,13 +1,21 @@
 import { z } from "zod";
 
 export const entityIdSchema = z.string().uuid();
-export const articleKeySchema = z.string().trim().min(1).max(100).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+export const articleKeySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 
 export const profileUpdateSchema = z
   .object({
     displayName: z.string().trim().min(1).max(100).nullable().optional(),
     avatarPath: z.string().trim().min(1).max(500).nullable().optional(),
-    locale: z.string().regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/).optional(),
+    locale: z
+      .string()
+      .regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/)
+      .optional(),
     timezone: z.string().trim().min(1).max(100).optional(),
     onboardingCompleted: z.boolean().optional(),
   })
@@ -19,6 +27,14 @@ export const interestTargetSchema = z.union([
 ]);
 export const interestsReplaceSchema = z
   .object({ interests: z.array(interestTargetSchema).max(100) })
+  .strict();
+export const onboardingCompleteSchema = z
+  .object({
+    displayName: z.string().trim().min(1).max(100),
+    locale: z.string().regex(/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/),
+    specialtyId: entityIdSchema,
+    topicIds: z.array(entityIdSchema).max(100),
+  })
   .strict();
 
 export const readingProgressUpsertSchema = z
@@ -38,9 +54,7 @@ export const libraryMutationSchema = z
   })
   .strict();
 
-export const collectionCreateSchema = z
-  .object({ name: z.string().trim().min(1).max(80) })
-  .strict();
+export const collectionCreateSchema = z.object({ name: z.string().trim().min(1).max(80) }).strict();
 
 export const noteCreateSchema = z
   .object({ articleKey: articleKeySchema, body: z.string().trim().min(1).max(20000) })
@@ -55,9 +69,7 @@ export const entitlementKeySchema = z
   .min(1)
   .max(100)
   .regex(/^[a-z0-9_.-]+$/);
-export const entitlementReadSchema = z
-  .object({ key: entitlementKeySchema })
-  .strict();
+export const entitlementReadSchema = z.object({ key: entitlementKeySchema }).strict();
 
 // Intentionally absent: schemas that let clients create subscriptions,
 // payments, staff roles or entitlements. Those are server-owned resources.
