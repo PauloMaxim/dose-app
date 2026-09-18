@@ -5,10 +5,12 @@ import { formatClock, TimePicker } from "@/components/time-picker";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import { authEnabled, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { SPECIALTIES } from "@/lib/content";
 import { useDose } from "@/lib/store";
 import type { Specialty, TitlePrefix } from "@/lib/types";
 import { cn, slugUsername } from "@/lib/utils";
+import { updateMyProfile } from "@/server/domains/user-data";
 
 export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
@@ -37,6 +39,7 @@ const TIMES: Array<{ label: string; hour: number | null }> = [
 
 function Onboarding() {
   const navigate = useNavigate();
+  const { user } = useCurrentUserState();
   const hydrated = useDose((s) => s.hydrated);
   const complete = useDose((s) => s.completeOnboarding);
   const update = useDose((s) => s.updateProfile);
@@ -103,6 +106,13 @@ function Onboarding() {
       planScreenSeen: false,
     });
     track("onboarding_complete", { dest: "planos" });
+    if (user) {
+      void updateMyProfile({ data: {
+        displayName: name.trim() || "Colega",
+        locale: profile.locale === "en" ? "en" : "pt-BR",
+        onboardingCompleted: true,
+      } });
+    }
     void navigate({ to: "/planos", replace: true });
   }
 
@@ -206,7 +216,7 @@ function Onboarding() {
             transform: `translate3d(-${step * paneW}px,0,0)`,
           }}
         >
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 0}>
             <SplashBg />
             <div className="relative z-10 flex flex-1 flex-col">
               <div className="flex flex-1 flex-col items-center justify-end pb-4 text-center">
@@ -263,7 +273,7 @@ function Onboarding() {
             </div>
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 1}>
             <h1 className="text-[28px] font-semibold tracking-tight">Como te chamamos?</h1>
             <p className="mt-2 text-sm text-muted">
               A saudação da home usa título e nome. Dá para mudar depois.
@@ -273,6 +283,7 @@ function Onboarding() {
                 <button
                   key={t}
                   type="button"
+                  aria-pressed={title === t}
                   onClick={() => setTitle(t)}
                   className={cn(
                     "h-11 flex-1 rounded-full text-sm font-semibold",
@@ -283,11 +294,16 @@ function Onboarding() {
                 </button>
               ))}
             </div>
+            <label htmlFor="onb-name" className="sr-only">
+              Seu nome
+            </label>
             <input
               id="onb-name"
               value={name}
               autoComplete="given-name"
               autoCapitalize="words"
+              aria-invalid={nameError}
+              aria-describedby={nameError ? "onb-name-error" : undefined}
               onChange={(e) => {
                 setName(e.target.value);
                 setNameError(false);
@@ -300,7 +316,7 @@ function Onboarding() {
               className="mt-4 h-12 rounded-full bg-card px-5 text-sm text-fg outline-none placeholder:text-subtle"
             />
             {nameError && (
-              <p className="mt-2 text-xs text-danger" role="alert">
+              <p id="onb-name-error" className="mt-2 text-xs text-danger" role="alert">
                 Escreva o nome que aparece na saudação, ou pule esta etapa.
               </p>
             )}
@@ -323,7 +339,7 @@ function Onboarding() {
             </Button>
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 2}>
             <h1 className="text-[28px] font-semibold tracking-tight">
               Você lê artigos com regularidade?
             </h1>
@@ -351,7 +367,7 @@ function Onboarding() {
             </Button>
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 3}>
             <h1 className="text-[28px] font-semibold tracking-tight">
               O que mais pesa na hora de ler?
             </h1>
@@ -379,7 +395,7 @@ function Onboarding() {
             </Button>
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 4}>
             <h1 className="text-[28px] font-semibold tracking-tight">
               Qual a melhor hora do dia para você ler?
             </h1>
@@ -416,7 +432,7 @@ function Onboarding() {
             </Button>
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 5}>
             <h1 className="text-[28px] font-semibold tracking-tight">Meta diária</h1>
             <p className="mt-2 text-sm text-muted">
               Quantos minutos por dia. A Lúmen come quando você cumpre. Dá para mudar depois.
@@ -426,6 +442,7 @@ function Onboarding() {
                 <button
                   key={g}
                   type="button"
+                  aria-pressed={goal === g}
                   onClick={() => {
                     setGoal(g);
                     update({ dailyGoalMin: g, weeklyGoalMin: g * 6 });
@@ -459,7 +476,7 @@ function Onboarding() {
             </Button>
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 6}>
             <h1 className="text-[28px] font-semibold tracking-tight">Sua lente clínica</h1>
             <p className="mt-2 text-sm text-muted">
               A edição do dia é a mesma para todos. A especialidade só ordena o catálogo.
@@ -469,6 +486,7 @@ function Onboarding() {
                 <button
                   key={s}
                   type="button"
+                  aria-pressed={specialty === s}
                   onClick={() => {
                     setSpecialty(s);
                     update({ specialty: s });
@@ -496,7 +514,7 @@ function Onboarding() {
             </Button>
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 7}>
             <div className="flex flex-1 flex-col items-center justify-center text-center">
               <Mascot
                 mood={demoOn ? "happy" : "hungry"}
@@ -531,7 +549,7 @@ function Onboarding() {
             )}
           </Pane>
 
-          <Pane width={paneW}>
+          <Pane width={paneW} active={step === 8}>
             <div className="rounded-2xl bg-card px-4 py-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -594,9 +612,22 @@ function Onboarding() {
   );
 }
 
-function Pane({ width, children }: { width: number; children: React.ReactNode }) {
+function Pane({
+  width,
+  active,
+  children,
+}: {
+  width: number
+  active: boolean
+  children: React.ReactNode
+}) {
   return (
-    <div className="relative flex h-full shrink-0 flex-col overflow-x-hidden px-6 pb-8 pt-2" style={{ width }}>
+    <div
+      className="relative flex h-full shrink-0 flex-col overflow-x-hidden px-6 pb-8 pt-2"
+      style={{ width }}
+      aria-hidden={!active}
+      inert={!active ? true : undefined}
+    >
       {children}
     </div>
   );
@@ -614,6 +645,7 @@ function Option({
   return (
     <button
       type="button"
+      aria-pressed={on}
       onClick={onClick}
       className={cn(
         "w-full rounded-2xl px-4 py-4 text-left text-sm font-medium",

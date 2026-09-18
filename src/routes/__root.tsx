@@ -2,6 +2,7 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { PhoneFrame } from "@/components/phone-frame";
+import { UserDataBridge } from "@/components/user-data-bridge";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Dose";
@@ -41,6 +42,7 @@ function Root() {
       <body>
         <PreviewHostBridge />
         <AuthProvider>
+          <UserDataBridge />
           <PhoneFrame>
             <Outlet />
           </PhoneFrame>

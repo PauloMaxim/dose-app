@@ -9,6 +9,9 @@ import { PaywallGate } from "@/components/paywall-gate";
 import { isPremium } from "@/lib/premium";
 import { useDose } from "@/lib/store";
 import { useInsightAi } from "@/lib/use-insight-ai";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { authEnabled } from "@/lib/auth/client";
+import { persistNote, persistNoteDelete, persistNoteUpdate } from "@/lib/user-content";
 
 function asSearchString(v: unknown): string | undefined {
   if (v == null || v === "") return undefined;
@@ -32,6 +35,7 @@ function InsightsPage() {
   const deleteInsight = useDose((s) => s.deleteInsight);
   const navigate = useNavigate();
   const [composer, setComposer] = useState(Boolean(novo));
+  const user = useCurrentUser();
 
   if (!isPremium(plan)) {
     return (
@@ -59,7 +63,8 @@ function InsightsPage() {
               void navigate({ to: "/insights", search: { novo: undefined, artigo: undefined } });
             }}
             onSave={(id, text) => {
-              addInsight(id, text);
+              if (user) void persistNote(id, text);
+              else if (!authEnabled) addInsight(id, text);
               setComposer(false);
               void navigate({ to: "/insights", search: { novo: undefined, artigo: undefined } });
             }}
@@ -95,7 +100,10 @@ function InsightsPage() {
                   <button
                     type="button"
                     aria-label="Excluir"
-                    onClick={() => deleteInsight(ins.id)}
+                    onClick={() => {
+                      if (user) void persistNoteDelete(ins.id);
+                      else if (!authEnabled) deleteInsight(ins.id);
+                    }}
                     className="text-subtle hover:text-danger"
                   >
                     <Trash2 className="size-4" />
@@ -104,7 +112,10 @@ function InsightsPage() {
                 <InsightBody
                   title={art?.title ?? ""}
                   text={ins.text}
-                  onApply={(t) => updateInsight(ins.id, t)}
+                  onApply={(t) => {
+                    if (user) void persistNoteUpdate(ins.id, t);
+                    else if (!authEnabled) updateInsight(ins.id, t);
+                  }}
                 />
               </article>
             );

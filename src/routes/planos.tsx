@@ -79,7 +79,7 @@ function PlanosPage() {
             </li>
           ))}
         </ul>
-        <div className="space-y-1.5">
+        <div className="space-y-1.5" role="radiogroup" aria-label="Escolha do plano">
           {PLANS.map((p) => {
             const on = picked === p.id;
             const yearly = p.id === "yearly";
@@ -87,6 +87,8 @@ function PlanosPage() {
               <button
                 key={p.id}
                 type="button"
+                role="radio"
+                aria-checked={on}
                 onClick={() => {
                   playSound("tap");
                   setPicked(p.id);

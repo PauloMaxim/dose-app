@@ -18,8 +18,8 @@ import { getRequest } from "@tanstack/react-start/server";
  * requests (SSR / server-to-server, which send no `Sec-Fetch-Site`), and
  * top-level GET navigations (how the OAuth callback and normal page loads
  * arrive). Every cross-site / same-site *scripted* request is rejected.
- * Together with `__Host-` cookies and Better Auth's `trustedOrigins`, this
- * closes the sibling-tenant attack surface. Enforced at the `authMiddleware`
+ * Together with Supabase token validation, this closes the sibling-request
+ * attack surface. Enforced at the `authMiddleware`
  * chokepoint (see `middleware.ts`).
  */
 export class CrossSiteRequestError extends Error {

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import {
-  authEnabledFromEnvValue,
+  authEnabledFromEnv,
   authInvariantWarnings,
   buildAuthEnabled,
   compareAuthInvariant,
@@ -27,20 +27,20 @@ function appEnvFetch(env) {
 }
 
 test("the flag predicate matches src/lib/auth", () => {
-  assert.equal(authEnabledFromEnvValue("false"), false);
-  assert.equal(authEnabledFromEnvValue("true"), true);
-  assert.equal(authEnabledFromEnvValue(undefined), true);
+  assert.equal(authEnabledFromEnv({}), false);
+  assert.equal(authEnabledFromEnv({ VITE_SUPABASE_URL: "https://example.supabase.co" }), false);
+  assert.equal(authEnabledFromEnv({ VITE_SUPABASE_URL: "https://example.supabase.co", VITE_SUPABASE_PUBLISHABLE_KEY: "key" }), true);
 });
 
 test("reads the value a live dev server resolved", async () => {
   assert.equal(
-    await probeDevAuthEnabled("http://127.0.0.1:8080", appEnvFetch({ VITE_AUTH_ENABLED: "false" })),
-    false,
+    await probeDevAuthEnabled("http://127.0.0.1:8080", appEnvFetch({ VITE_SUPABASE_URL: "https://example.supabase.co", VITE_SUPABASE_PUBLISHABLE_KEY: "key" })),
+    true,
   );
 });
 
-test("a server started without the flag reads as sign-in on", async () => {
-  assert.equal(await probeDevAuthEnabled("http://127.0.0.1:8080", appEnvFetch({})), true);
+test("a server without Supabase credentials reads as sign-in off", async () => {
+  assert.equal(await probeDevAuthEnabled("http://127.0.0.1:8080", appEnvFetch({})), false);
 });
 
 test("agreement passes", () => {
@@ -92,7 +92,7 @@ test("only a divergence warns the smoke verdict", () => {
 
 test("the build side resolves the template's shipped app-env", () => {
   assert.equal(buildAuthEnabled(projectRoot(), {}), false);
-  assert.equal(buildAuthEnabled(projectRoot(), { VITE_AUTH_ENABLED: "true" }), true);
+  assert.equal(buildAuthEnabled(projectRoot(), { VITE_SUPABASE_URL: "https://example.supabase.co", VITE_SUPABASE_PUBLISHABLE_KEY: "key" }), true);
 });
 
 test("the CLI reports rather than silently passing when run via a symlink", async () => {

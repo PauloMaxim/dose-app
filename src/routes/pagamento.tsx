@@ -8,6 +8,7 @@ import { useT } from "@/lib/i18n";
 import { PLANS, planName } from "@/lib/plans";
 import { playSound } from "@/lib/sound";
 import { useDose } from "@/lib/store";
+import { authEnabled } from "@/lib/auth/client";
 import type { PlanId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,7 @@ function PagamentoPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  const [pixCopied, setPixCopied] = useState(false);
 
   const pixCode = useMemo(
     () => `00020126580014br.gov.bcb.pix0136dose+${id}@dose.app5204000053039865802BR5920DOSE MEDICINA LTDA6009SAO PAULO62070503***6304`,
@@ -43,7 +45,10 @@ function PagamentoPage() {
   );
 
   function finish() {
-    update({ plan: id, planScreenSeen: true });
+    // This screen remains a visual prototype. A configured production client
+    // cannot create premium authority locally; a future payment webhook will
+    // create the entitlement server-side.
+    update(authEnabled ? { planScreenSeen: true } : { plan: id, planScreenSeen: true });
     setDone(true);
     playSound("success");
   }
@@ -226,13 +231,23 @@ function PagamentoPage() {
             <button
               type="button"
               className="mt-3 w-full break-all rounded-2xl bg-card-2 px-3 py-3 text-left font-mono text-[11px] text-muted"
-              onClick={() => {
-                void navigator.clipboard?.writeText(pixCode);
+              onClick={async () => {
+                setPixCopied(false);
+                try {
+                  await navigator.clipboard.writeText(pixCode);
+                  setPixCopied(true);
+                } catch {
+                  setError("Não foi possível copiar o código PIX neste navegador.");
+                }
                 playSound("tap");
               }}
             >
               {pixCode.slice(0, 72)}…
             </button>
+            <p className="mt-2 min-h-4 text-[12px] text-teal" aria-live="polite">
+              {pixCopied ? "Código PIX copiado." : ""}
+            </p>
+            {error && <p className="mt-1 text-[13px] text-danger" role="alert">{error}</p>}
             <Button size="lg" className="mt-4 w-full" onClick={() => void payPix()} disabled={busy}>
               {busy ? "Confirmando PIX…" : "Já paguei"}
             </Button>

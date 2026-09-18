@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { editionForArticle, getArticle } from "@/lib/content";
 import { canStartRead, isSaved, useDose } from "@/lib/store";
 import { PaywallGate } from "@/components/paywall-gate";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { authEnabled } from "@/lib/auth/client";
+import { completeProgress, persistLibraryEntry, queueProgress } from "@/lib/user-content";
 
 export const Route = createFileRoute("/ler/$id")({
   component: LerPage,
@@ -28,6 +31,7 @@ function LerPage() {
   const logs = useDose((s) => s.logs);
   const liked = Boolean(saved?.liked);
   const edition = editionForArticle(id);
+  const user = useCurrentUser();
 
   const scroller = useRef<HTMLDivElement>(null);
   const [pct, setPct] = useState(0);
@@ -38,7 +42,8 @@ function LerPage() {
 
   useEffect(() => {
     restored.current = false;
-    setPct(progress?.completed ? 0 : (progress?.scrollPct ?? 0));
+    const initialProgress = useDose.getState().progress[id];
+    setPct(initialProgress?.completed ? 0 : (initialProgress?.scrollPct ?? 0));
     const el = scroller.current;
     if (el) el.scrollTop = 0;
   }, [id]);
@@ -88,10 +93,12 @@ function LerPage() {
     const next = max <= 0 ? 0 : Math.min(99, Math.round((el.scrollTop / max) * 100));
     setPct(next);
     recordScroll(id, next);
+    if (user) queueProgress(id, next);
   }
 
   function finish() {
-    completeArticle(id);
+    if (!authEnabled || user) completeArticle(id);
+    if (user) void completeProgress(id);
     if (edition) {
       void navigate({ to: "/edicao/$id", params: { id: edition.id }, replace: true });
     } else {
@@ -133,7 +140,10 @@ function LerPage() {
         <button
           type="button"
           aria-label="Gostar"
-          onClick={() => toggleLike(id)}
+          onClick={() => {
+            if (user) void persistLibraryEntry(id, !liked, saved?.collectionIds ?? []);
+            else if (!authEnabled) toggleLike(id);
+          }}
           className="flex size-10 items-center justify-center"
         >
           <Heart className={liked ? "size-5 fill-danger text-danger" : "size-5 text-muted"} />

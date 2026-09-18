@@ -7,6 +7,9 @@ import { getArticle } from "@/lib/content";
 import { isPremium } from "@/lib/premium";
 import { useDose } from "@/lib/store";
 import { useInsightAi } from "@/lib/use-insight-ai";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { authEnabled } from "@/lib/auth/client";
+import { persistNote } from "@/lib/user-content";
 
 type RecCtor = new () => {
   lang: string
@@ -38,6 +41,7 @@ export function InsightSheet({
   const addInsight = useDose((s) => s.addInsight);
   const premium = isPremium(useDose((s) => s.profile.plan));
   const organize = useInsightAi();
+  const user = useCurrentUser();
   const [draft, setDraft] = useState("");
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -88,6 +92,10 @@ export function InsightSheet({
   async function save() {
     const text = draft.trim();
     if (text.length < 4) return;
+    if (authEnabled && !user) {
+      setErr("Sua sessão expirou. Entre novamente para salvar a nota.");
+      return;
+    }
     setBusy(true);
     setErr(null);
     recRef.current?.stop();
@@ -95,7 +103,9 @@ export function InsightSheet({
       const title = getArticle(articleId)?.title ?? "";
       const res = await organize(text, title);
       if (res.error) setErr(res.error);
-      addInsight(articleId, res.text);
+      if (user) await persistNote(articleId, res.text);
+      else if (!authEnabled) addInsight(articleId, res.text);
+      else throw new Error("session expired");
       onClose();
     } catch {
       setErr("Não consegui salvar.");

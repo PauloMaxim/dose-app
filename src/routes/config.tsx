@@ -21,7 +21,7 @@ import { useState, type ReactNode } from "react";
 import { AvatarEdit } from "@/components/avatar";
 import { formatClock, TimePicker } from "@/components/time-picker";
 import { Button } from "@/components/ui/button";
-import { authClient, signOut } from "@/lib/auth/client";
+import { changePassword, signOut, updateEmail } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useT } from "@/lib/i18n";
 import { planName } from "@/lib/plans";
@@ -29,6 +29,7 @@ import { playSound } from "@/lib/sound";
 import { useDose } from "@/lib/store";
 import type { AppLocale, ThemeMode, TitlePrefix } from "@/lib/types";
 import { cn, slugUsername } from "@/lib/utils";
+import { updateMyProfile } from "@/server/domains/user-data";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,
@@ -183,6 +184,7 @@ function ConfigPage() {
                 const next = nameDraft.trim();
                 if (next.length < 2) return;
                 update({ name: next });
+                if (user) void updateMyProfile({ data: { displayName: next } });
                 if (!profile.username) update({ username: slugUsername(next) });
                 setOpen(null);
               }}
@@ -237,12 +239,7 @@ function ConfigPage() {
                   setFormMsg("");
                   const next = emailDraft.trim();
                   if (!next.includes("@")) return;
-                  const fn = (authClient as { changeEmail?: (d: { newEmail: string }) => Promise<{ error?: { message?: string } }> }).changeEmail;
-                  if (!fn) {
-                    setFormMsg("Não disponível nesta sessão.");
-                    return;
-                  }
-                  const { error } = await fn({ newEmail: next });
+                  const { error } = await updateEmail(next);
                   setFormMsg(error ? "Não deu para alterar o email." : "Email atualizado.");
                 })();
               }}
@@ -282,19 +279,7 @@ function ConfigPage() {
                     setFormMsg("A nova senha precisa de 8 caracteres.");
                     return;
                   }
-                  const fn = (
-                    authClient as {
-                      changePassword?: (d: {
-                        currentPassword: string
-                        newPassword: string
-                      }) => Promise<{ error?: { message?: string } }>
-                    }
-                  ).changePassword;
-                  if (!fn) {
-                    setFormMsg("Não disponível nesta sessão.");
-                    return;
-                  }
-                  const { error } = await fn({ currentPassword: curPass, newPassword: newPass });
+                  const { error } = await changePassword(curPass, newPass);
                   setFormMsg(error ? "Não deu para alterar a senha." : "Senha atualizada.");
                 })();
               }}
@@ -353,7 +338,10 @@ function ConfigPage() {
                 <button
                   key={loc}
                   type="button"
-                  onClick={() => update({ locale: loc })}
+                    onClick={() => {
+                      update({ locale: loc });
+                      if (user) void updateMyProfile({ data: { locale: loc === "en" ? "en" : "pt-BR" } });
+                    }}
                   className={cn(
                     "h-7 rounded-full px-3 text-[11px] font-semibold",
                     profile.locale === loc ? "tab-gradient text-on-accent" : "text-muted",

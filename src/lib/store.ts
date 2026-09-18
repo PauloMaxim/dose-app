@@ -10,7 +10,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { ARTICLES } from "./content";
 import { DEFAULT_LOOK, migrateLook } from "./outfits";
-import { FREE_READS_PER_DAY, FREE_SAVES, isPremium, parsePlan } from "./premium";
+import { FREE_READS_PER_DAY, FREE_SAVES, isPremium } from "./premium";
 import type {
   Collection,
   DayLog,
@@ -383,7 +383,8 @@ export const useDose = create<DoseState>()(
             theme: p.profile?.theme === "light" ? "light" : "dark",
             soundOn: p.profile?.soundOn !== false,
             locale: p.profile?.locale === "en" ? "en" : "pt",
-            plan: parsePlan(p.profile?.plan),
+            // Billing state is never restored from browser storage.
+            plan: "free",
             planScreenSeen: Boolean(p.profile?.planScreenSeen),
           },
           comments: p.comments ?? [],
@@ -391,7 +392,7 @@ export const useDose = create<DoseState>()(
         };
       },
       partialize: (s) => ({
-        profile: s.profile,
+        profile: { ...s.profile, plan: "free" as const },
         progress: s.progress,
         logs: s.logs,
         insights: s.insights,

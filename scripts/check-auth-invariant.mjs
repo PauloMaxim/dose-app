@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Fail loudly when the running dev server and the next build disagree about
- * `VITE_AUTH_ENABLED`.
+ * the pair `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY`.
  *
  * `npm run dev`, `npm run build` and `npm run preview` all get the flag from
  * `scripts/with-app-env.mjs`, so they agree by construction — but a dev server
@@ -28,8 +28,8 @@ import { isMainModule, mergeAppEnv, projectRoot, readAppEnv } from "./with-app-e
 const DEFAULT_DEV_URL = "http://127.0.0.1:8080";
 
 /** The predicate `src/lib/auth/{client,server}.ts` apply to the flag. */
-export function authEnabledFromEnvValue(value) {
-  return value !== "false";
+export function authEnabledFromEnv(env) {
+  return Boolean(env?.VITE_SUPABASE_URL?.trim() && env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim());
 }
 
 /**
@@ -75,7 +75,7 @@ export async function probeDevAuthEnabled(devUrl, fetchImpl = fetch) {
     return null;
   }
   if (env === null || typeof env !== "object") return null;
-  return authEnabledFromEnvValue(env.VITE_AUTH_ENABLED);
+  return authEnabledFromEnv(env);
 }
 
 /** The smoke-verdict warnings for a comparison: a real divergence only. */
@@ -86,7 +86,7 @@ export function authInvariantWarnings(result) {
 /** What `vite build` / `vite preview` will resolve, via the same wrapper. */
 export function buildAuthEnabled(root = projectRoot(), processEnv = process.env) {
   const env = mergeAppEnv(readAppEnv(root), processEnv);
-  return authEnabledFromEnvValue(env.VITE_AUTH_ENABLED);
+  return authEnabledFromEnv(env);
 }
 
 async function main(argv) {
