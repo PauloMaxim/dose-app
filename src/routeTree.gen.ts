@@ -24,7 +24,6 @@ import { Route as AppPerfilRouteImport } from './routes/_app/perfil'
 import { Route as ArtigoIdRouteImport } from './routes/artigo.$id'
 import { Route as EdicaoIdRouteImport } from './routes/edicao.$id'
 import { Route as LerIdRouteImport } from './routes/ler.$id'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -100,11 +99,6 @@ const LerIdRoute = LerIdRouteImport.update({
   path: '/ler/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -121,7 +115,6 @@ export interface FileRoutesByFullPath {
   '/artigo/$id': typeof ArtigoIdRoute
   '/edicao/$id': typeof EdicaoIdRoute
   '/ler/$id': typeof LerIdRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/config': typeof ConfigRoute
@@ -138,7 +131,6 @@ export interface FileRoutesByTo {
   '/edicao/$id': typeof EdicaoIdRoute
   '/ler/$id': typeof LerIdRoute
   '/': typeof AppIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -157,7 +149,6 @@ export interface FileRoutesById {
   '/edicao/$id': typeof EdicaoIdRoute
   '/ler/$id': typeof LerIdRoute
   '/_app/': typeof AppIndexRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -176,7 +167,6 @@ export interface FileRouteTypes {
     | '/artigo/$id'
     | '/edicao/$id'
     | '/ler/$id'
-    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/config'
@@ -193,7 +183,6 @@ export interface FileRouteTypes {
     | '/edicao/$id'
     | '/ler/$id'
     | '/'
-    | '/api/auth/$'
   id:
     | '__root__'
     | '/_app'
@@ -211,7 +200,6 @@ export interface FileRouteTypes {
     | '/edicao/$id'
     | '/ler/$id'
     | '/_app/'
-    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -224,7 +212,6 @@ export interface RootRouteChildren {
   ArtigoIdRoute: typeof ArtigoIdRoute
   EdicaoIdRoute: typeof EdicaoIdRoute
   LerIdRoute: typeof LerIdRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -334,13 +321,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LerIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -374,7 +354,6 @@ const rootRouteChildren: RootRouteChildren = {
   ArtigoIdRoute: ArtigoIdRoute,
   EdicaoIdRoute: EdicaoIdRoute,
   LerIdRoute: LerIdRoute,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -1,8 +1,14 @@
 node_modules/
+.vercel/
+.output/
+.supabase/
+dist/
+coverage/
+.project_id
+.github_repo
 .env
 .env.*
-dist/
-.vercel/
+!.env.example
 screenshots/
 artifacts/
 attachments/

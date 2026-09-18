@@ -15,6 +15,9 @@ import { matchQuery } from "@/lib/search";
 import { isSaved, prioritizeArticleIds, useDose } from "@/lib/store";
 import { parseIso } from "@/lib/utils";
 import type { StudyType } from "@/lib/types";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { authEnabled } from "@/lib/auth/client";
+import { persistNote } from "@/lib/user-content";
 
 export const Route = createFileRoute("/_app/artigos")({
   component: ArtigosPage,
@@ -47,6 +50,7 @@ function ArtigosPage() {
   const progress = useDose((s) => s.progress);
   const specialty = useDose((s) => s.profile.specialty);
   const topics = useDose((s) => s.profile.topics);
+  const user = useCurrentUser();
 
   const query = q.trim();
 
@@ -247,7 +251,8 @@ function ArtigosPage() {
               <NoteComposer
                 onClose={() => setComposer(false)}
                 onSave={(id, text) => {
-                  addInsight(id, text);
+                  if (user) void persistNote(id, text);
+                  else if (!authEnabled) addInsight(id, text);
                   setComposer(false);
                 }}
               />

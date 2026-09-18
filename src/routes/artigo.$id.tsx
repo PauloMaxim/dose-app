@@ -12,6 +12,9 @@ import { Button } from "@/components/ui/button";
 import { communityFor } from "@/lib/community";
 import { editionForArticle, getArticle } from "@/lib/content";
 import { isSaved, useDose } from "@/lib/store";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { authEnabled } from "@/lib/auth/client";
+import { persistLibraryEntry } from "@/lib/user-content";
 
 export const Route = createFileRoute("/artigo/$id")({
   component: ArtigoPage,
@@ -38,6 +41,7 @@ function ArtigoPage() {
   const [draftStars, setDraftStars] = useState(0);
   const [published, setPublished] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const user = useCurrentUser();
   const newCommentRef = useRef<HTMLLIElement>(null);
 
   const community = useMemo(() => communityFor(id), [id]);
@@ -123,7 +127,10 @@ function ArtigoPage() {
                 <button
                   type="button"
                   aria-label={liked ? "Remover gosto" : "Gostar"}
-                  onClick={() => toggleLike(article.id)}
+                  onClick={() => {
+                    if (user) void persistLibraryEntry(article.id, !liked, saved?.collectionIds ?? []);
+                    else if (!authEnabled) toggleLike(article.id);
+                  }}
                   className="flex size-11 items-center justify-center rounded-full bg-black/40 text-fg backdrop-blur"
                 >
                   <Heart

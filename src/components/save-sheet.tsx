@@ -3,7 +3,10 @@ import { Check, Plus, X } from "lucide-react";
 import { PaywallBanner } from "@/components/paywall-gate";
 import { Button } from "@/components/ui/button";
 import { FREE_SAVES, isPremium } from "@/lib/premium";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { authEnabled } from "@/lib/auth/client";
 import { isSaved, selectSavedCount, useDose } from "@/lib/store";
+import { persistCollection, persistLibraryEntry } from "@/lib/user-content";
 import { cn } from "@/lib/utils";
 
 export function SaveSheet({
@@ -21,12 +24,15 @@ export function SaveSheet({
   const saveToCollections = useDose((s) => s.saveToCollections);
   const unsave = useDose((s) => s.unsave);
   const addCollection = useDose((s) => s.addCollection);
+  const user = useCurrentUser();
 
   const [picked, setPicked] = useState<string[]>(
     saved?.collectionIds.length ? saved.collectionIds : ["later"],
   );
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const presets = useMemo(() => {
     const names = new Set(collections.map((c) => c.name.toLowerCase()));
@@ -39,8 +45,19 @@ export function SaveSheet({
     );
   }
 
-  function create(name: string) {
-    const id = addCollection(name);
+  async function create(name: string) {
+    setError(null);
+    if (authEnabled && !user) {
+      setError("Sua sessão expirou. Entre novamente para criar a pasta.");
+      return;
+    }
+    let id: string;
+    try {
+      id = user ? await persistCollection(name) : addCollection(name);
+    } catch {
+      setError("Não foi possível criar a pasta.");
+      return;
+    }
     if (!id) return;
     setPicked((cur) => (cur.includes(id) ? cur : [...cur, id]));
     setDraft("");
@@ -91,7 +108,7 @@ export function SaveSheet({
               <button
                 key={name}
                 type="button"
-                onClick={() => create(name)}
+              onClick={() => void create(name)}
                 className="h-9 rounded-full bg-card-2 px-3 text-xs font-medium text-muted"
               >
                 + {name}
@@ -104,7 +121,7 @@ export function SaveSheet({
             className="mt-3 flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (draft.trim()) create(draft);
+              if (draft.trim()) void create(draft);
             }}
           >
             <input
@@ -141,9 +158,17 @@ export function SaveSheet({
             <Button
               variant="secondary"
               className="flex-1"
+              disabled={busy}
               onClick={() => {
-                unsave(articleId);
-                onClose();
+                if (authEnabled && !user) {
+                  setError("Sua sessão expirou. Entre novamente.");
+                  return;
+                }
+                setBusy(true);
+                const action = user
+                  ? persistLibraryEntry(articleId, Boolean(saved?.liked), [])
+                  : Promise.resolve(unsave(articleId));
+                void action.then(onClose).catch(() => setError("Não foi possível remover o artigo.")).finally(() => setBusy(false));
               }}
             >
               Remover
@@ -151,15 +176,24 @@ export function SaveSheet({
           )}
           <Button
             className="flex-[1.4]"
+            disabled={busy}
             onClick={() => {
-              saveToCollections(articleId, picked);
-              onClose();
+              if (authEnabled && !user) {
+                setError("Sua sessão expirou. Entre novamente.");
+                return;
+              }
+              setBusy(true);
+              const action = user
+                ? persistLibraryEntry(articleId, Boolean(saved?.liked), picked)
+                : Promise.resolve(saveToCollections(articleId, picked));
+              void action.then(onClose).catch(() => setError("Não foi possível salvar o artigo.")).finally(() => setBusy(false));
             }}
           >
             Salvar
           </Button>
         </div>
         )}
+        {error && <p className="mt-2 text-xs text-danger" role="alert">{error}</p>}
       </div>
     </div>
   );

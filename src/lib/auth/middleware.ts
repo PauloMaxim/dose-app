@@ -8,30 +8,24 @@ import { createMiddleware } from "@tanstack/react-start";
  * thread it themselves.
  *
  *   import { createServerFn } from "@tanstack/react-start";
- *   import { getSql } from "@/lib/db";
  *   import { authMiddleware } from "@/lib/auth/middleware";
  *
  *   export const listTodos = createServerFn({ method: "GET" })
  *     .middleware([authMiddleware])
  *     .handler(async ({ context }) => {
- *       const sql = await getSql();
- *       return sql`select * from todos where user_id = ${context.userId}`;
+ *       return readRowsFor(context.userId, context.accessToken);
  *     });
  *
- * Signed out with auth on (live preview included) -> throws `UnauthorizedError`
- * (see `verify.server.ts`). With auth disabled (`VITE_AUTH_ENABLED=false`, the
- * shipped default) it resolves the shared dev user — but throws instead when a
- * `DATABASE_URL` is also set, so an app without sign-in must not use this at
- * all. On the auth-on path, use it on every server function that touches
- * per-user data and scope every query by `context.userId`.
+ * Missing or invalid Supabase access tokens fail closed with UnauthorizedError.
+ * Use it on every server function that touches per-user data.
  */
 export const authMiddleware = createMiddleware({ type: "function" })
   .client(async ({ next }) => {
     // Live preview (partitioned iframe): the session rides a bearer token, not a
     // cookie, so forward it to the server. Null when deployed (cookie auth), so
     // this is a no-op there.
-    const { getBearerToken } = await import("./client");
-    return next({ sendContext: { bearerToken: getBearerToken() ?? undefined } });
+    const { getAccessToken } = await import("./client");
+    return next({ sendContext: { accessToken: (await getAccessToken()) ?? undefined } });
   })
   .server(async ({ next, context }) => {
     // ONLY import `*.server` modules here. This file is dual client/server
@@ -42,6 +36,6 @@ export const authMiddleware = createMiddleware({ type: "function" })
     const { requireUserId } = await import("./verify.server");
     // Reject scripted cross-site/sibling requests before touching per-user data.
     assertSameSiteRequest();
-    const userId = await requireUserId(context.bearerToken);
-    return next({ context: { userId } });
+    const userId = await requireUserId(context.accessToken);
+    return next({ context: { userId, accessToken: context.accessToken as string } });
   });
