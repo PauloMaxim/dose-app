@@ -71,6 +71,7 @@ test("merge unions provenance idempotently", () => {
   assert.equal(once.provenance.length, 2);
   assert.deepEqual(mergeArticles(once, b).provenance, once.provenance);
 });
+
 test("deduplication is idempotent across repeated ingestion input", () => {
   const input = [article("pubmed", "1", { pmid: "1" }), article("europe_pmc", "1", { pmid: "1" })];
   const once = deduplicateArticles(input);
