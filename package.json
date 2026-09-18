@@ -16,7 +16,9 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/auth/supabase-auth.test.ts",
+    "test": "node --test scripts/*.test.mjs && tsx --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/auth/supabase-auth.test.ts src/server/scientific/scientific.test.ts",
+    "test:scientific": "tsx --test src/server/scientific/scientific.test.ts",
+    "smoke:scientific": "tsx scripts/scientific-smoke.ts",
     "test:foundation": "node --test scripts/foundation-security.test.mjs scripts/rls-runtime.test.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
@@ -89,6 +91,7 @@
     "prettier": "^3.4.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.56.1",
+    "tsx": "^4.20.6",
     "vite": "^8.2.0"
   }
 }
