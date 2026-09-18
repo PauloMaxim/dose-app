@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import { authEnabled, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { SPECIALTIES } from "@/lib/content";
+import { SPECIALTIES, TOPIC_OPTIONS } from "@/lib/content";
+import type { ScientificCatalog } from "@/lib/scientific-catalog";
 import { useDose } from "@/lib/store";
 import type { Specialty, TitlePrefix } from "@/lib/types";
 import { cn, slugUsername } from "@/lib/utils";
-import { updateMyProfile } from "@/server/domains/user-data";
+import { readScientificCatalog } from "@/server/domains/catalog";
+import { completeMyOnboarding, readMyInterests } from "@/server/domains/user-data";
 
 export const Route = createFileRoute("/onboarding")({
   component: Onboarding,
@@ -52,6 +54,11 @@ function Onboarding() {
   const [name, setName] = useState(profile.name === "Marina" ? "" : profile.name);
   const [title, setTitle] = useState<TitlePrefix>(profile.title);
   const [specialty, setSpecialty] = useState<Specialty>(profile.specialty);
+  const [catalog, setCatalog] = useState<ScientificCatalog | null>(null);
+  const [specialtyId, setSpecialtyId] = useState("");
+  const [topicIds, setTopicIds] = useState<string[]>([]);
+  const [catalogError, setCatalogError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [habit, setHabit] = useState("");
   const [block, setBlock] = useState("");
   const [goal, setGoal] = useState(
@@ -83,6 +90,30 @@ function Onboarding() {
   }, [hydrated, step]);
 
   useEffect(() => {
+    if (!hydrated || !user) return;
+    let current = true;
+    Promise.all([readScientificCatalog(), readMyInterests()])
+      .then(([nextCatalog, interests]) => {
+        if (!current) return;
+        if (!nextCatalog.specialties.length) throw new Error("empty catalog");
+        setCatalog(nextCatalog);
+        const remoteSpecialty = interests.find((x) => x.specialty_id)?.specialty_id ?? "";
+        setSpecialtyId(remoteSpecialty);
+        setTopicIds(interests.flatMap((x) => (x.topic_id ? [x.topic_id] : [])));
+        const remoteName = nextCatalog.specialties.find((x) => x.id === remoteSpecialty)?.name;
+        if (remoteName && SPECIALTIES.includes(remoteName as Specialty))
+          setSpecialty(remoteName as Specialty);
+      })
+      .catch(
+        () =>
+          current && setCatalogError("Catálogo indisponível. Tente novamente antes de concluir."),
+      );
+    return () => {
+      current = false;
+    };
+  }, [hydrated, user]);
+
+  useEffect(() => {
     if (!hydrated || !returning || step === 0) return;
     void navigate({ to: profile.planScreenSeen ? "/" : "/planos", replace: true });
   }, [hydrated, returning, step, profile.planScreenSeen, navigate]);
@@ -91,12 +122,40 @@ function Onboarding() {
     setStep(Math.max(0, Math.min(LAST, next)));
   }
 
-  function finishToHome() {
+  async function finishToHome() {
+    setPermError("");
+    if (user) {
+      if (!catalog || !specialtyId) {
+        setPermError(catalogError || "Escolha sua área principal antes de concluir.");
+        go(6);
+        return;
+      }
+      setSaving(true);
+      try {
+        await completeMyOnboarding({
+          data: {
+            displayName: name.trim() || "Colega",
+            locale: profile.locale === "en" ? "en" : "pt-BR",
+            specialtyId,
+            topicIds,
+          },
+        });
+      } catch (error) {
+        setPermError(
+          error instanceof Error ? error.message : "Não foi possível salvar seus interesses.",
+        );
+        setSaving(false);
+        return;
+      }
+      setSaving(false);
+    }
     complete({
       name: name.trim() || "Colega",
       title,
       specialty,
-      topics: [],
+      topics: catalog
+        ? catalog.topics.filter((x) => topicIds.includes(x.id)).map((x) => x.name)
+        : [],
       dailyGoalMin: goal,
       weeklyGoalMin: goal * 6,
       reminderHour: hour,
@@ -106,13 +165,6 @@ function Onboarding() {
       planScreenSeen: false,
     });
     track("onboarding_complete", { dest: "planos" });
-    if (user) {
-      void updateMyProfile({ data: {
-        displayName: name.trim() || "Colega",
-        locale: profile.locale === "en" ? "en" : "pt-BR",
-        onboardingCompleted: true,
-      } });
-    }
     void navigate({ to: "/planos", replace: true });
   }
 
@@ -127,7 +179,9 @@ function Onboarding() {
           const result = await Notification.requestPermission();
           track("onboarding_reminder_result", { result });
           if (result !== "granted") {
-            setPermError("Sem permissão o aviso não chega. Você pode ligar depois em Configurações.");
+            setPermError(
+              "Sem permissão o aviso não chega. Você pode ligar depois em Configurações.",
+            );
           }
         } catch {
           setPermError("Este aparelho não entrega aviso em segundo plano.");
@@ -137,7 +191,7 @@ function Onboarding() {
       }
     }
     track("onboarding_continue", { step: LAST, hour: hour ?? -1 });
-    finishToHome();
+    await finishToHome();
   }
 
   if (!hydrated) {
@@ -459,8 +513,8 @@ function Onboarding() {
             </div>
             <p className="mt-5 text-center text-sm leading-relaxed text-muted">
               {goal} minutos por dia são cerca de{" "}
-              <span className="font-semibold text-teal">{yearHours} horas</span> de evidência em
-              um ano.
+              <span className="font-semibold text-teal">{yearHours} horas</span> de evidência em um
+              ano.
             </p>
             <div className="flex-1" />
             <Button
@@ -482,28 +536,79 @@ function Onboarding() {
               A edição do dia é a mesma para todos. A especialidade só ordena o catálogo.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
-              {SPECIALTIES.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  aria-pressed={specialty === s}
-                  onClick={() => {
-                    setSpecialty(s);
-                    update({ specialty: s });
-                  }}
-                  className={cn(
-                    "h-11 rounded-full px-4 text-sm font-medium",
-                    specialty === s ? "tab-gradient text-on-accent" : "bg-card text-muted",
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
+              {(catalog?.specialties ?? SPECIALTIES.map((name) => ({ id: name, name }))).map(
+                (s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    aria-pressed={catalog ? specialtyId === s.id : specialty === s.name}
+                    onClick={() => {
+                      setSpecialty(s.name as Specialty);
+                      if (catalog) setSpecialtyId(s.id);
+                      update({ specialty: s.name as Specialty });
+                    }}
+                    className={cn(
+                      "h-11 rounded-full px-4 text-sm font-medium",
+                      (catalog ? specialtyId === s.id : specialty === s.name)
+                        ? "tab-gradient text-on-accent"
+                        : "bg-card text-muted",
+                    )}
+                  >
+                    {s.name}
+                  </button>
+                ),
+              )}
             </div>
+            <h2 className="mt-5 text-sm font-semibold">Interesses</h2>
+            <p className="mt-1 text-xs text-muted">
+              Selecione quantos quiser, inclusive temas transversais.
+            </p>
+            <div className="mt-3 flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+              {[
+                ...(catalog?.topics ??
+                  TOPIC_OPTIONS.map((name) => ({ id: name, name, specialtyId: null }))),
+              ]
+                .sort(
+                  (a, b) =>
+                    Number(b.specialtyId === specialtyId) - Number(a.specialtyId === specialtyId),
+                )
+                .map((topic) => {
+                  const on = catalog
+                    ? topicIds.includes(topic.id)
+                    : profile.topics.includes(topic.name);
+                  return (
+                    <button
+                      key={topic.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() =>
+                        catalog &&
+                        setTopicIds((ids) =>
+                          ids.includes(topic.id)
+                            ? ids.filter((id) => id !== topic.id)
+                            : [...ids, topic.id],
+                        )
+                      }
+                      className={cn(
+                        "min-h-10 rounded-full px-3 text-xs font-medium",
+                        on ? "tab-gradient text-on-accent" : "bg-card text-muted",
+                      )}
+                    >
+                      {topic.name}
+                    </button>
+                  );
+                })}
+            </div>
+            {catalogError && (
+              <p className="mt-2 text-xs text-danger" role="alert">
+                {catalogError}
+              </p>
+            )}
             <div className="flex-1" />
             <Button
               size="lg"
               className="w-full"
+              disabled={Boolean(user && (!catalog || !specialtyId))}
               onClick={() => {
                 update({ specialty });
                 track("onboarding_continue", { step: 6, specialty });
@@ -566,9 +671,7 @@ function Onboarding() {
                 </span>
               </div>
             </div>
-            <h1 className="mt-6 text-[28px] font-semibold tracking-tight">
-              Um toque por dia
-            </h1>
+            <h1 className="mt-6 text-[28px] font-semibold tracking-tight">Um toque por dia</h1>
             <p className="mt-2 text-sm leading-relaxed text-muted">
               {hour != null
                 ? "Ajuste a hora e o minuto se quiser. Só o lembrete da edição — sem encheção."
@@ -590,7 +693,12 @@ function Onboarding() {
               </p>
             )}
             <div className="flex-1" />
-            <Button size="lg" className="w-full" onClick={() => void continueReminder()}>
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={saving}
+              onClick={() => void continueReminder()}
+            >
               {hour == null ? "Ir para a home" : `Ativar lembrete às ${formatClock(hour, minute)}`}
             </Button>
             <button
@@ -600,7 +708,7 @@ function Onboarding() {
                 setHour(null);
                 setMinute(0);
                 setReminderHour(null);
-                finishToHome();
+                void finishToHome();
               }}
             >
               Agora não
@@ -617,9 +725,9 @@ function Pane({
   active,
   children,
 }: {
-  width: number
-  active: boolean
-  children: React.ReactNode
+  width: number;
+  active: boolean;
+  children: React.ReactNode;
 }) {
   return (
     <div
@@ -638,9 +746,9 @@ function Option({
   onClick,
   children,
 }: {
-  on: boolean
-  onClick: () => void
-  children: React.ReactNode
+  on: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
     <button
