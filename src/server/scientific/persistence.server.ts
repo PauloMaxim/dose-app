@@ -1,5 +1,6 @@
 import "./server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { classifyScientificArticle } from "./classification";
 import { bibliographicFallback, normalizeDoi } from "./identity";
 import { mergeArticles } from "./merge";
 import type { ScientificArticle } from "./types";
@@ -7,6 +8,7 @@ import type { ScientificArticle } from "./types";
 export type PersistenceOutcome = "new" | "updated" | "reconciled";
 
 function databaseArticle(article: ScientificArticle) {
+  const classification = classifyScientificArticle(article);
   return {
     title: article.title,
     abstract: article.abstract,
@@ -30,6 +32,9 @@ function databaseArticle(article: ScientificArticle) {
     mesh_terms: article.meshTerms,
     bibliographic_key: bibliographicFallback(article),
     ingested_at: article.ingestedAt ?? new Date().toISOString(),
+    study_type: classification.studyType,
+    evidence_level: classification.evidenceLevel,
+    classification_version: classification.ruleVersion,
   };
 }
 
@@ -132,22 +137,20 @@ export async function persistScientificArticle(
     outcome = "new";
   }
   for (const provenance of article.provenance) {
-    const result = await client
-      .from("article_sources")
-      .upsert(
-        {
-          article_id: articleId,
-          provider: provenance.source,
-          external_id: provenance.externalId,
-          source_url: provenance.sourceUrl,
-          metadata: {
-            discovered_by: provenance.discoveredBy,
-            is_open_access: provenance.isOpenAccess ?? null,
-            license: provenance.license ?? null,
-          },
+    const result = await client.from("article_sources").upsert(
+      {
+        article_id: articleId,
+        provider: provenance.source,
+        external_id: provenance.externalId,
+        source_url: provenance.sourceUrl,
+        metadata: {
+          discovered_by: provenance.discoveredBy,
+          is_open_access: provenance.isOpenAccess ?? null,
+          license: provenance.license ?? null,
         },
-        { onConflict: "provider,external_id" },
-      );
+      },
+      { onConflict: "provider,external_id" },
+    );
     if (result.error) throw result.error;
   }
   return outcome;
