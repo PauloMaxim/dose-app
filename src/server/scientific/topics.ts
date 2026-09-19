@@ -27,6 +27,10 @@ export interface TopicMatch {
   ruleVersion: string;
   evidence: TopicEvidence[];
 }
+type TopicClassifiableArticle = Pick<
+  ScientificArticle,
+  "title" | "abstract" | "keywords" | "meshTerms" | "publicationTypes" | "journal"
+>;
 
 const norm = (s: string) =>
   s
@@ -41,7 +45,7 @@ const has = (text: string, term: string) =>
 
 /** Rules are catalog data supplied by the trusted caller, not a hard-coded taxonomy. */
 export function classifyArticleTopics(
-  article: ScientificArticle,
+  article: TopicClassifiableArticle,
   rules: readonly TopicRule[],
 ): TopicMatch[] {
   const fields: Array<[TopicEvidenceField, string[]]> = [

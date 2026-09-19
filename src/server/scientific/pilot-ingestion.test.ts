@@ -24,7 +24,10 @@ function article(id: string, doi?: string): ScientificArticle {
 }
 
 function memoryStore(): PilotOperationStore {
-  const records = new Map<string, { requestHash: string; status: "running" | "completed" | "failed"; report: PilotReport | null }>();
+  const records = new Map<
+    string,
+    { requestHash: string; status: "running" | "completed" | "failed"; report: PilotReport | null }
+  >();
   return {
     async claim(operationKey, requestHash) {
       const existing = records.get(operationKey);
@@ -71,8 +74,14 @@ const request = (values: Record<string, unknown> = {}) => ({
 test("pilot endpoint fails closed for method, authorization, and malformed payloads", async () => {
   const deps = dependencies();
   assert.equal((await handleScientificPilotRequest(request({ method: "GET" }), deps)).status, 405);
-  assert.equal((await handleScientificPilotRequest(request({ authorization: null }), deps)).status, 401);
-  assert.equal((await handleScientificPilotRequest(request({ authorization: "Bearer wrong" }), deps)).status, 401);
+  assert.equal(
+    (await handleScientificPilotRequest(request({ authorization: null }), deps)).status,
+    401,
+  );
+  assert.equal(
+    (await handleScientificPilotRequest(request({ authorization: "Bearer wrong" }), deps)).status,
+    401,
+  );
   for (const invalid of [
     null,
     {},
@@ -84,8 +93,23 @@ test("pilot endpoint fails closed for method, authorization, and malformed paylo
     { ...body, dateFrom: "2024-01-01", dateTo: "2026-01-01" },
     { ...body, unexpected: true },
   ])
-    assert.equal((await handleScientificPilotRequest(request({ body: invalid }), deps)).status, 400);
-  assert.equal((await handleScientificPilotRequest(request(), dependencies({ query: " " }))).status, 503);
+    assert.equal(
+      (await handleScientificPilotRequest(request({ body: invalid }), deps)).status,
+      400,
+    );
+  assert.equal(
+    (
+      await handleScientificPilotRequest(
+        request({ body: { ...body, unexpected: "x".repeat(3_000) } }),
+        deps,
+      )
+    ).status,
+    413,
+  );
+  assert.equal(
+    (await handleScientificPilotRequest(request(), dependencies({ query: " " }))).status,
+    503,
+  );
 });
 
 test("same operation replays safely and conflicting or concurrent requests do not execute", async () => {
@@ -108,7 +132,10 @@ test("same operation replays safely and conflicting or concurrent requests do no
 
   let release!: () => void;
   const blocked = new Promise<void>((resolve) => (release = resolve));
-  const concurrentDeps = dependencies({ operations: memoryStore(), discover: async () => (await blocked, [article("456")]) });
+  const concurrentDeps = dependencies({
+    operations: memoryStore(),
+    discover: async () => (await blocked, [article("456")]),
+  });
   const running = handleScientificPilotRequest(request(), concurrentDeps);
   await Promise.resolve();
   const concurrent = await handleScientificPilotRequest(request(), concurrentDeps);
@@ -123,7 +150,14 @@ test("pilot deduplicates before persistence and reports partial persistence with
     discover: async () => [article("123", "10.1000/same"), article("456", "10.1000/same")],
     persist: async (articles) => {
       persisted = articles.length;
-      return { found: 1, new: 0, updated: 0, reconciled: 0, failed: 1, errors: ["sensitive database detail"] };
+      return {
+        found: 1,
+        new: 0,
+        updated: 0,
+        reconciled: 0,
+        failed: 1,
+        errors: ["sensitive database detail"],
+      };
     },
   });
   const response = await handleScientificPilotRequest(request(), deps);
@@ -134,7 +168,10 @@ test("pilot deduplicates before persistence and reports partial persistence with
   assert.equal(response.body.report?.deduplicated, 1);
   assert.equal(response.body.report?.skipped, 1);
   const encoded = JSON.stringify(response);
-  assert.doesNotMatch(encoded, /Allowed API-supplied abstract|sensitive database detail|dedicated-pilot-token/);
+  assert.doesNotMatch(
+    encoded,
+    /Allowed API-supplied abstract|sensitive database detail|dedicated-pilot-token/,
+  );
   assert.doesNotMatch(encoded, /full.?text/i);
 });
 
@@ -146,10 +183,18 @@ test("timeouts, 429, and 5xx are sanitized and never attempt persistence", async
   ]) {
     let persisted = false;
     const response = await handleScientificPilotRequest(
-      request({ body: { ...body, operationKey: `${KEY}_${error.name}_${String((error as ScientificHttpError).status ?? 0)}` } }),
+      request({
+        body: {
+          ...body,
+          operationKey: `${KEY}_${error.name}_${String((error as ScientificHttpError).status ?? 0)}`,
+        },
+      }),
       dependencies({
         discover: async () => Promise.reject(error),
-        persist: async () => ((persisted = true), { found: 0, new: 0, updated: 0, reconciled: 0, failed: 0, errors: [] }),
+        persist: async () => (
+          (persisted = true),
+          { found: 0, new: 0, updated: 0, reconciled: 0, failed: 0, errors: [] }
+        ),
       }),
     );
     assert.equal(response.status, 502);
@@ -170,7 +215,10 @@ test("endpoint and migration remain server-only, bounded, and decoupled from cla
   assert.match(service, /^import "\.\/server-only";/);
   assert.match(service, /SCIENTIFIC_PILOT_MAX_LIMIT = 20/);
   assert.match(service, /timeoutMs: 8_000, retries: 1/);
-  assert.doesNotMatch(service, /classifyArticleTopics|reconcileAutomaticTopics|topic-rules\.v1\.fixture|full.?text/i);
+  assert.doesNotMatch(
+    service,
+    /classifyArticleTopics|reconcileAutomaticTopics|topic-rules\.v1\.fixture|full.?text/i,
+  );
   assert.match(migration, /enable row level security/);
   assert.match(migration, /revoke all .* from public, anon, authenticated/);
   assert.doesNotMatch(migration, /grant .* to anon|grant .* to authenticated/i);

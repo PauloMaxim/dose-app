@@ -10,11 +10,17 @@ import type { ScientificArticle } from "./types";
 
 export const SCIENTIFIC_PILOT_DEFAULT_LIMIT = 10;
 export const SCIENTIFIC_PILOT_MAX_LIMIT = 20;
+export const SCIENTIFIC_PILOT_MAX_BODY_BYTES = 2_048;
 
 const payloadSchema = z
   .object({
     operationKey: z.string().regex(/^[A-Za-z0-9_-]{16,80}$/),
-    limit: z.number().int().min(1).max(SCIENTIFIC_PILOT_MAX_LIMIT).default(SCIENTIFIC_PILOT_DEFAULT_LIMIT),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(SCIENTIFIC_PILOT_MAX_LIMIT)
+      .default(SCIENTIFIC_PILOT_DEFAULT_LIMIT),
     dateFrom: z.string().date(),
     dateTo: z.string().date(),
   })
@@ -48,7 +54,10 @@ interface OperationRecord {
 }
 
 export interface PilotOperationStore {
-  claim(operationKey: string, requestHash: string): Promise<{ claimed: boolean; existing?: OperationRecord }>;
+  claim(
+    operationKey: string,
+    requestHash: string,
+  ): Promise<{ claimed: boolean; existing?: OperationRecord }>;
   finish(operationKey: string, status: "completed" | "failed", report: PilotReport): Promise<void>;
 }
 
@@ -56,7 +65,12 @@ export interface PilotDependencies {
   expectedToken: string;
   query: string;
   operations: PilotOperationStore;
-  discover(options: { query: string; limit: number; dateFrom: string; dateTo: string }): Promise<ScientificArticle[]>;
+  discover(options: {
+    query: string;
+    limit: number;
+    dateFrom: string;
+    dateTo: string;
+  }): Promise<ScientificArticle[]>;
   persist(articles: ScientificArticle[]): Promise<{
     found: number;
     new: number;
@@ -91,7 +105,9 @@ export const isScientificPilotAuthorized = (
 };
 
 const requestHash = (query: string, payload: z.infer<typeof payloadSchema>) =>
-  createHash("sha256").update(JSON.stringify({ query, ...payload })).digest("hex");
+  createHash("sha256")
+    .update(JSON.stringify({ query, ...payload }))
+    .digest("hex");
 
 const safeErrors = (errors: readonly unknown[]) =>
   errors.slice(0, 20).map((error) => {
@@ -106,9 +122,18 @@ export async function handleScientificPilotRequest(
   request: PilotRequest,
   dependencies: PilotDependencies,
 ): Promise<PilotResponse> {
-  if (request.method.toUpperCase() !== "POST") return { status: 405, body: { ok: false, error: "method_not_allowed" } };
+  if (request.method.toUpperCase() !== "POST")
+    return { status: 405, body: { ok: false, error: "method_not_allowed" } };
   if (!isScientificPilotAuthorized(request.authorization, dependencies.expectedToken))
     return { status: 401, body: { ok: false, error: "unauthorized" } };
+  let bodyBytes = SCIENTIFIC_PILOT_MAX_BODY_BYTES + 1;
+  try {
+    bodyBytes = Buffer.byteLength(JSON.stringify(request.body), "utf8");
+  } catch {
+    // Non-JSON bodies are rejected without reflecting parser details.
+  }
+  if (bodyBytes > SCIENTIFIC_PILOT_MAX_BODY_BYTES)
+    return { status: 413, body: { ok: false, error: "request_too_large" } };
   const parsed = payloadSchema.safeParse(request.body);
   if (!parsed.success) return { status: 400, body: { ok: false, error: "invalid_request" } };
   const query = dependencies.query.trim();
@@ -167,7 +192,9 @@ export async function handleScientificPilotRequest(
       errors: safeErrors([error]),
     };
     // A failed final ledger update must not reveal infrastructure details or trigger an unsafe retry.
-    await dependencies.operations.finish(parsed.data.operationKey, "failed", report).catch(() => undefined);
+    await dependencies.operations
+      .finish(parsed.data.operationKey, "failed", report)
+      .catch(() => undefined);
     return { status: 502, body: { ok: false, report, error: "pilot_failed" } };
   }
 }
