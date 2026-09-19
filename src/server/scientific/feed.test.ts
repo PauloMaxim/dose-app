@@ -146,13 +146,71 @@ test("explanation, stable tie break and all 19 paginate without duplicates", () 
     const page = buildScientificFeed(xs, p, {}, { asOf: "2026-09-18", pageSize: 4, cursor });
     ids.push(...page.items.map((x) => x.article.id));
     assert.ok(
-      page.items.every((x) => x.matchedTopics[0].confidence === 0.8 && x.reasons.relevance > 0),
+      page.items.every(
+        (x) =>
+          x.matchedTopics[0].confidence === 0.8 &&
+          x.scoreComponents.topicMatch > 0 &&
+          x.scoreTotal ===
+            Object.values(x.scoreComponents).reduce((sum, value) => sum + value, 0) &&
+          x.rankingVersion === page.rankingVersion,
+      ),
     );
     cursor = page.nextCursor ?? undefined;
   } while (cursor);
   assert.equal(ids.length, 19);
   assert.equal(new Set(ids).size, 19);
   assert.deepEqual(ids, [...ids].sort());
+});
+test("cursor is opaque, snapshot-bound, mode-bound, and fails closed", () => {
+  const xs = [classified("a"), classified("b")];
+  const preferences = { specialtyIds: ["cardio"], topicIds: [] };
+  const first = buildScientificFeed(
+    xs,
+    preferences,
+    {},
+    {
+      asOf: "2026-09-18",
+      pageSize: 1,
+      mode: "recent",
+    },
+  );
+  assert.ok(first.nextCursor);
+  assert.doesNotMatch(first.nextCursor!, /\{|\[|"articleId"/);
+  assert.throws(() =>
+    buildScientificFeed(
+      xs,
+      preferences,
+      {},
+      {
+        asOf: "2026-09-18",
+        cursor: "not-a-valid-cursor",
+      },
+    ),
+  );
+  assert.throws(() =>
+    buildScientificFeed(
+      xs,
+      preferences,
+      {},
+      {
+        asOf: "2026-09-18",
+        cursor: first.nextCursor!,
+        mode: "classics",
+      },
+    ),
+  );
+  assert.throws(() =>
+    buildScientificFeed(
+      xs,
+      preferences,
+      {},
+      {
+        asOf: "2026-09-19",
+        cursor: first.nextCursor!,
+        mode: "recent",
+      },
+    ),
+  );
 });
 test("trusted classification is recomputed", () => {
   const x: any = classified("x");

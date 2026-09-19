@@ -56,7 +56,9 @@ const normalize = (value: string) =>
     .toLocaleLowerCase("en-US");
 
 /** Classifies only source metadata. Rule order is intentional and versioned. */
-export function classifyScientificArticle(article: ScientificArticle): ArticleClassification {
+export function classifyScientificArticle(
+  article: Pick<ScientificArticle, "publicationTypes">,
+): ArticleClassification {
   const terms = article.publicationTypes.map(normalize).sort();
   for (const [studyType, evidenceLevel, needles] of rules) {
     const matchedTerm = terms.find((term) => needles.some((needle) => term.includes(needle)));
