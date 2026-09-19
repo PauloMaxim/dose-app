@@ -177,14 +177,19 @@ test("automatic and editorial contracts are distinguishable without AI", () => {
 test("schema and reconciler preserve editorial and make automatic associations idempotent", async () => {
   const { readFile } = await import("node:fs/promises");
   const migration = await readFile("supabase/migrations/202609210001_scientific_feed.sql", "utf8");
+  const atomicMigration = await readFile(
+    "supabase/migrations/202609250001_harden_topic_reconciliation_validation.sql",
+    "utf8",
+  );
   const reconciler = await readFile("src/server/scientific/topic-persistence.server.ts", "utf8");
   assert.match(migration, /association_type.*editorial.*automatic/s);
   assert.match(migration, /method text/);
   assert.match(migration, /evidence jsonb/);
   assert.match(migration, /rule_version text/);
-  assert.match(reconciler, /association_type === "editorial"/);
-  assert.match(reconciler, /upsert\(/);
-  assert.match(reconciler, /association_type", "automatic"/);
+  assert.match(reconciler, /reconcile_automatic_article_topics/);
+  assert.match(atomicMigration, /association_type = 'automatic'/);
+  assert.match(atomicMigration, /where article_topics\.association_type = 'automatic'/);
+  assert.match(atomicMigration, /for update/);
 });
 
 test("production feed is session-bound and contains no AI integration", async () => {

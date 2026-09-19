@@ -9,43 +9,22 @@ export async function reconcileAutomaticTopics(
   ruleVersion: string,
   matches: readonly TopicMatch[],
 ) {
-  const wanted = new Set(matches.map((x) => x.topicId));
-  const current = await client
-    .from("article_topics")
-    .select("topic_id,association_type,rule_version")
-    .eq("article_id", articleId);
-  if (current.error) throw current.error;
-  for (const row of current.data ?? [])
-    if (
-      row.association_type === "automatic" &&
-      row.rule_version === ruleVersion &&
-      !wanted.has(row.topic_id)
-    ) {
-      const deleted = await client
-        .from("article_topics")
-        .delete()
-        .eq("article_id", articleId)
-        .eq("topic_id", row.topic_id)
-        .eq("association_type", "automatic");
-      if (deleted.error) throw deleted.error;
-    }
-  for (const match of matches) {
-    const existing = (current.data ?? []).find((x) => x.topic_id === match.topicId);
-    if (existing?.association_type === "editorial") continue;
-    const result = await client
-      .from("article_topics")
-      .upsert(
-        {
-          article_id: articleId,
-          topic_id: match.topicId,
-          association_type: "automatic",
-          confidence: match.confidence,
-          method: match.method,
-          evidence: match.evidence,
-          rule_version: match.ruleVersion,
-        },
-        { onConflict: "article_id,topic_id" },
-      );
-    if (result.error) throw result.error;
-  }
+  if (!ruleVersion.trim()) throw new TypeError("ruleVersion must not be empty");
+  if (matches.some((match) => match.ruleVersion !== ruleVersion))
+    throw new TypeError("all matches must use the expected rule version");
+  if (new Set(matches.map((match) => match.topicId)).size !== matches.length)
+    throw new TypeError("matches must contain unique topic IDs");
+
+  const result = await client.rpc("reconcile_automatic_article_topics", {
+    p_article_id: articleId,
+    p_rule_version: ruleVersion,
+    p_matches: matches.map((match) => ({
+      topic_id: match.topicId,
+      confidence: match.confidence,
+      method: match.method,
+      evidence: match.evidence,
+      rule_version: match.ruleVersion,
+    })),
+  });
+  if (result.error) throw result.error;
 }
