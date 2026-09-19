@@ -5,6 +5,10 @@ const serverEnvSchema = z.object({
   VITE_SUPABASE_PUBLISHABLE_KEY: z.string().min(20),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(20),
 });
+const scientificPilotEnvSchema = z.object({
+  SCIENTIFIC_INGESTION_TOKEN: z.string().min(32),
+  SCIENTIFIC_PILOT_QUERY: z.string().trim().min(3).max(300),
+});
 const authEnvSchema = serverEnvSchema.pick({ VITE_SUPABASE_URL: true, VITE_SUPABASE_PUBLISHABLE_KEY: true });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
@@ -27,4 +31,9 @@ export function getServerEnv(): ServerEnv {
 
 export function getAuthEnv(): AuthEnv {
   return parseEnv(authEnvSchema);
+}
+
+/** Dedicated operational authorization and server-owned query for the one-shot pilot. */
+export function getScientificPilotEnv() {
+  return parseEnv(scientificPilotEnvSchema);
 }
