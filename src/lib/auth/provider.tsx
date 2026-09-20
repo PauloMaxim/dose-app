@@ -1,7 +1,8 @@
 import type { Session } from "@supabase/supabase-js";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { getSupabaseBrowserClient } from "../supabase/client";
 import { authEnabled } from "./client";
+import { canResetPassword } from "./auth-flow";
 import { AuthContext, reduceAuthSecurityState } from "./context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -11,6 +12,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     recoveryUserId: null as string | null,
     callbackUserId: null as string | null,
   });
+  const securityRef = useRef(security);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -35,14 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (active) {
         setSession(nextSession);
         setPending(false);
-        setSecurity((current) =>
-          reduceAuthSecurityState(
-            current,
-            event,
-            nextSession,
-            typeof window !== "undefined" && window.location.pathname === "/auth/confirm",
-          ),
+        const nextSecurity = reduceAuthSecurityState(
+          securityRef.current,
+          event,
+          nextSession,
+          typeof window !== "undefined" && window.location.pathname === "/auth/confirm",
         );
+        securityRef.current = nextSecurity;
+        setSecurity(nextSecurity);
       }
     });
     return () => {
@@ -51,15 +53,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const hasRecoveryProof = useCallback(
+    (userId: string) => securityRef.current.recoveryUserId === userId,
+    [],
+  );
+  const hasCallbackProof = useCallback(
+    (userId: string) => securityRef.current.callbackUserId === userId,
+    [],
+  );
+  const consumeRecovery = useCallback(() => {
+    const nextSecurity = { ...securityRef.current, recoveryUserId: null };
+    securityRef.current = nextSecurity;
+    setSecurity(nextSecurity);
+  }, []);
+
   const value = useMemo(
     () => ({
       session,
       isPending,
       recoveryUserId: security.recoveryUserId,
+      recoveryPending: canResetPassword(security.recoveryUserId, session?.user.id ?? null),
       callbackUserId: security.callbackUserId,
-      consumeRecovery: () => setSecurity((current) => ({ ...current, recoveryUserId: null })),
+      hasRecoveryProof,
+      hasCallbackProof,
+      consumeRecovery,
     }),
-    [isPending, security.callbackUserId, security.recoveryUserId, session],
+    [
+      consumeRecovery,
+      hasCallbackProof,
+      hasRecoveryProof,
+      isPending,
+      security.callbackUserId,
+      security.recoveryUserId,
+      session,
+    ],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

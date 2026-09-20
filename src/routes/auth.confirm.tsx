@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { AuthShell } from "@/components/auth-shell";
 import { friendlyAuthError, type AuthCallbackKind } from "@/lib/auth/auth-flow";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -10,24 +10,30 @@ import { AuthContext } from "@/lib/auth/context";
 export const Route = createFileRoute("/auth/confirm")({ component: Confirm });
 type ConfirmState = "confirming" | "identity-error" | "post-confirm-error";
 
-function Confirm() {
-  const { recoveryUserId, callbackUserId } = useContext(AuthContext);
-  const initialRecoveryUserId = useRef(recoveryUserId).current;
-  const initialCallbackUserId = useRef(callbackUserId).current;
+export function Confirm() {
+  const { hasRecoveryProof, hasCallbackProof } = useContext(AuthContext);
+  const navigate = useNavigate();
   const [state, setState] = useState<ConfirmState>("confirming");
   const [message, setMessage] = useState("");
   const [confirmedKind, setConfirmedKind] = useState<AuthCallbackKind>(null);
 
-  const finishAfterIdentity = useCallback(async (kind: AuthCallbackKind) => {
-    setConfirmedKind(kind);
-    const result = await finishConfirmedIdentity(kind, acceptCurrentLegalDocuments);
-    if (result.status === "post-confirm-error") {
-      setMessage("Seu e-mail foi confirmado, mas não conseguimos finalizar o cadastro agora.");
-      setState("post-confirm-error");
-      return;
-    }
-    window.location.replace(result.destination);
-  }, []);
+  const finishAfterIdentity = useCallback(
+    async (kind: AuthCallbackKind) => {
+      setConfirmedKind(kind);
+      const result = await finishConfirmedIdentity(kind, acceptCurrentLegalDocuments);
+      if (result.status === "post-confirm-error") {
+        setMessage("Seu e-mail foi confirmado, mas não conseguimos finalizar o cadastro agora.");
+        setState("post-confirm-error");
+        return;
+      }
+      if (kind === "recovery") {
+        await navigate({ to: result.destination, replace: true });
+        return;
+      }
+      window.location.replace(result.destination);
+    },
+    [navigate],
+  );
 
   useEffect(() => {
     let active = true;
@@ -62,7 +68,7 @@ function Confirm() {
           if (result.error) throw result.error;
           if (!result.data.session) throw new Error("invalid link");
           confirmedUserId = result.data.session.user.id;
-          if (initialCallbackUserId !== confirmedUserId) throw new Error("invalid link");
+          if (!hasCallbackProof(confirmedUserId)) throw new Error("invalid link");
         }
         unsubscribeCallback();
         unsubscribeCallback = undefined;
@@ -70,8 +76,7 @@ function Confirm() {
         // Recovery is accepted only when Supabase emits its dedicated event;
         // a forgeable `kind` query parameter can never promote a normal session.
         const recoveryProven =
-          sawPasswordRecovery ||
-          Boolean(confirmedUserId && initialRecoveryUserId === confirmedUserId);
+          sawPasswordRecovery || Boolean(confirmedUserId && hasRecoveryProof(confirmedUserId));
         const kind = resolveConfirmedCallbackKind({
           requestedKind,
           redirectType: recoveryProven ? "recovery" : null,
@@ -91,7 +96,7 @@ function Confirm() {
       active = false;
       unsubscribeCallback?.();
     };
-  }, [finishAfterIdentity, initialCallbackUserId, initialRecoveryUserId]);
+  }, [finishAfterIdentity, hasCallbackProof, hasRecoveryProof]);
 
   return (
     <AuthShell
