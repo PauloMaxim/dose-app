@@ -1,4 +1,5 @@
 import "../server-only";
+import { randomUUID } from "node:crypto";
 import type { ScientificSummary } from "./contract";
 import { SUMMARY_SCHEMA_VERSION } from "./contract";
 import { buildSummaryInput, summaryIdentity, type SummaryArticle } from "./domain";
@@ -25,9 +26,14 @@ export interface SummaryRecord {
   attempts: number;
   usage?: TokenUsage;
   estimatedCostMicros?: number;
+  costConfigVersion?: string;
   error?: string;
+  failureCode?: string;
+  durationMs?: number;
+  providerMetadata?: Record<string, string | number | boolean | null>;
   createdAt: string;
   completedAt?: string;
+  claimToken?: string;
 }
 export interface SummaryRepository {
   get(key: string): Promise<SummaryRecord | null>;
@@ -37,7 +43,7 @@ export interface SummaryRepository {
 export type CostEstimator = (
   usage: TokenUsage,
   context: { provider: string; model: string },
-) => number | undefined;
+) => number | { micros: number; configVersion: string } | undefined;
 
 export class InMemorySummaryRepository implements SummaryRepository {
   private records = new Map<string, SummaryRecord>();
@@ -68,6 +74,7 @@ export class ScientificSummaryPipeline {
     article: SummaryArticle,
   ): Promise<SummaryRecord | { status: "disabled" | "ineligible" }> {
     if (!this.config.enabled) return { status: "disabled" };
+    if (this.config.provider !== this.provider.id) return { status: "disabled" };
     const input = buildSummaryInput(article, this.config.maxInputCharacters);
     if (!input) return { status: "ineligible" };
     const identity = summaryIdentity(
@@ -100,26 +107,32 @@ export class ScientificSummaryPipeline {
       summary: null,
       attempts: (existing?.attempts ?? 0) + 1,
       createdAt: existing?.createdAt ?? new Date().toISOString(),
+      claimToken: randomUUID(),
     };
     const claim = await this.repository.claim(processing);
     if (!claim.claimed) return claim.record;
+    const startedAt = Date.now();
     try {
       const result = await this.provider.generateScientificSummary(input, {
         model: this.config.model,
         maxOutputTokens: this.config.maxOutputTokens,
         promptVersion: this.versions.prompt,
         schemaVersion: this.versions.schema,
+        timeoutMs: this.config.timeoutMs,
       });
       processing.summary = validateSummary(result.summary, input);
       processing.status = "completed";
       processing.usage = result.usage;
-      processing.estimatedCostMicros = result.usage
+      const cost = result.usage
         ? this.estimateCost?.(result.usage, {
             provider: this.provider.id,
             model: this.config.model,
           })
         : undefined;
+      processing.estimatedCostMicros = typeof cost === "number" ? cost : cost?.micros;
+      processing.costConfigVersion = typeof cost === "object" ? cost.configVersion : undefined;
       processing.completedAt = new Date().toISOString();
+      processing.providerMetadata = result.metadata;
     } catch (error) {
       const typed =
         error instanceof SummaryProviderError
@@ -130,8 +143,10 @@ export class ScientificSummaryPipeline {
           ? "failed_retryable"
           : "failed_permanent";
       processing.error = sanitizeError(error);
+      processing.failureCode = typed.code;
       processing.summary = null;
     }
+    processing.durationMs = Math.max(0, Date.now() - startedAt);
     await this.repository.save(processing);
     return processing;
   }

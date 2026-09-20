@@ -1,4 +1,4 @@
-import type { ScientificSummary } from "./contract";
+import { SUMMARY_SCHEMA_VERSION, summaryFieldNames, type ScientificSummary } from "./contract";
 import {
   SummaryProviderError,
   type ProviderConfig,
@@ -7,7 +7,7 @@ import {
   type SummaryInput,
 } from "./provider.server";
 
-export type FakeMode = "success" | "timeout" | "rate_limit" | "transient" | "invalid";
+export type FakeMode = "success" | "timeout" | "rate_limit" | "transient" | "permanent" | "invalid";
 export class FakeScientificSummaryProvider implements ScientificSummaryProvider {
   readonly id = "fake";
   calls = 0;
@@ -27,7 +27,9 @@ export class FakeScientificSummaryProvider implements ScientificSummaryProvider 
       throw new SummaryProviderError("rate_limit", "Fake rate limit", true);
     if (this.mode === "transient")
       throw new SummaryProviderError("transient", "Fake transient error", true);
-    if (this.mode === "invalid") return { summary: { shortSummary: "invalid" } };
+    if (this.mode === "permanent")
+      throw new SummaryProviderError("permanent", "Fake permanent error", false);
+    if (this.mode === "invalid") return { summary: { contextualTitle: "invalid" } };
     return {
       summary: this.result ?? validFakeSummary(input),
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, cachedTokens: 10 },
@@ -36,19 +38,31 @@ export class FakeScientificSummaryProvider implements ScientificSummaryProvider 
 }
 export function validFakeSummary(input: SummaryInput): ScientificSummary {
   return {
-    shortSummary: input.title,
-    objective: null,
+    schemaVersion: SUMMARY_SCHEMA_VERSION,
+    contextualTitle: input.title,
+    scientificQuestion: null,
+    context: null,
     studyDesign: input.studyType,
     populationOrSample: null,
-    methods: null,
-    mainFindings: null,
-    keyNumbers: [],
-    authorsConclusion: null,
+    interventionOrExposure: null,
+    comparator: null,
+    primaryOutcomes: null,
+    mainResults: null,
+    interpretation: null,
     limitations: null,
     practicalImplications: null,
-    evidenceContext: input.evidenceLevel,
-    cautions: null,
-    technicalTerms: [],
+    evidenceType: input.evidenceLevel,
+    keyPoints: [input.title],
+    unavailableFields: summaryFieldNames.filter((field) => {
+      const supported =
+        field === "studyDesign"
+          ? input.studyType
+          : field === "evidenceType"
+            ? input.evidenceLevel
+            : null;
+      return supported === null;
+    }),
+    identifiers: { doi: input.doi, pmid: input.pmid, pmcid: input.pmcid },
     sourceScope: "abstract_and_metadata",
   };
 }

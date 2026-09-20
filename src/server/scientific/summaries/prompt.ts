@@ -1,3 +1,3 @@
-export const SUMMARY_PROMPT_VERSION = "pt-BR-grounded.v1";
-export const SUMMARY_SYSTEM_PROMPT = `Você produz um resumo científico estritamente fundamentado apenas no abstract e metadados fornecidos.
-Não invente resultados, números, tamanho amostral, métodos, limitações ou implicações clínicas. Não transforme associação em causalidade e não extrapole além do abstract. Preserve incerteza, diferencie a conclusão dos autores de fato estabelecido e use null quando a informação não estiver disponível. Nunca preencha lacunas. sourceScope deve ser abstract_and_metadata. Não forneça raciocínio interno.`;
+export const SUMMARY_PROMPT_VERSION = "pt-BR-grounded.v2";
+export const SUMMARY_SYSTEM_PROMPT = `Produza um resumo técnico e didático usando SOMENTE o abstract e os metadados fornecidos.
+Não invente resultados, números, amostra, métodos, comparadores, limitações, referências ou implicações. Não alegue acesso ao texto integral. Não transforme associação em causalidade e preserve incerteza. Copie DOI/PMID/PMCID exatamente do input, inclusive null. Para cada informação ausente, use null e inclua o nome do campo em unavailableFields; não inclua campos sustentados nessa lista. sourceScope deve ser abstract_and_metadata e schemaVersion deve corresponder ao schema. Não forneça raciocínio interno.`;

@@ -5,6 +5,7 @@ import {
 } from "./classification";
 import type { TopicMatch } from "./topics";
 import type { ScientificArticle } from "./types";
+import { evaluateSummaryEligibility } from "./summaries/domain";
 
 export interface FeedArticle extends Omit<ScientificArticle, "discoveredBy" | "provenance"> {
   id: string;
@@ -170,7 +171,7 @@ export function buildScientificFeed(
           rankingVersion: SCIENTIFIC_FEED_RANKING_VERSION,
           userState: { saved: saved.has(article.id), read: false as const },
           feedEligible: true as const,
-          summaryEligible: (article.abstract?.trim().length ?? 0) >= 100,
+          summaryEligible: evaluateSummaryEligibility(article).eligible,
           rank: 0,
         },
       ];
