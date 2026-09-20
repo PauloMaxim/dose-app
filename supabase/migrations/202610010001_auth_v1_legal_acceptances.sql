@@ -9,10 +9,14 @@ create table public.legal_acceptances (
 );
 
 alter table public.legal_acceptances enable row level security;
+revoke all on table public.legal_acceptances from public, anon;
+revoke insert, update, delete on table public.legal_acceptances from authenticated;
 create policy legal_acceptances_select_own on public.legal_acceptances for select to authenticated
 using ((select auth.uid()) = user_id);
 grant select on public.legal_acceptances to authenticated;
 
+-- Kept in public because PostgREST RPC exposes only configured API schemas.
+-- SECURITY DEFINER is required so callers need EXECUTE, never direct INSERT.
 create or replace function public.accept_current_legal_documents()
 returns void language plpgsql security definer set search_path = '' as $$
 begin

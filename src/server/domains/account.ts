@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "../../lib/auth/middleware";
 import { getSupabaseAdminClient, getSupabaseUserClient } from "../db/supabase.server";
+import { revokeSessionsAndDeleteUser } from "./account-security";
 
 /** Records the versions accepted by the authenticated caller; identity is never client supplied. */
 export const acceptCurrentLegalDocuments = createServerFn({ method: "POST" })
@@ -17,7 +18,17 @@ export const acceptCurrentLegalDocuments = createServerFn({ method: "POST" })
 export const deleteMyAccount = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const { error } = await getSupabaseAdminClient().auth.admin.deleteUser(context.userId);
-    if (error) throw new Error("Não foi possível excluir sua conta agora.");
+    const admin = getSupabaseAdminClient().auth.admin;
+    try {
+      await revokeSessionsAndDeleteUser(
+        {
+          revokeSessions: async (accessToken) => admin.signOut(accessToken, "global"),
+          deleteUser: async (userId) => admin.deleteUser(userId),
+        },
+        { userId: context.userId, accessToken: context.accessToken },
+      );
+    } catch {
+      throw new Error("Não foi possível excluir sua conta agora.");
+    }
     return { ok: true as const };
   });

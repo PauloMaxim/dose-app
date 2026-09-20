@@ -10,6 +10,10 @@ import {
 import { useDose } from "../store";
 import { refreshMyContent } from "../user-content";
 import { readMyProfile } from "../../server/domains/user-data";
+import { readMyInterests } from "../../server/domains/user-data";
+import { readScientificCatalog } from "../../server/domains/catalog";
+import { SPECIALTIES } from "../content";
+import type { Specialty } from "../types";
 import { privateCacheMustReset, type RemoteOnboardingState } from "./app-access";
 import { AppAccessContext } from "./app-access-context";
 import { useCurrentUserState } from "./use-current-user";
@@ -35,15 +39,27 @@ export function AppAccessProvider({ children }: { children: ReactNode }) {
     const currentRequest = ++requestId.current;
     setRemoteOnboarding("loading");
     try {
-      const remote = await readMyProfile();
+      const [remote, interests, catalog] = await Promise.all([
+        readMyProfile(),
+        readMyInterests(),
+        readScientificCatalog(),
+      ]);
       if (currentRequest !== requestId.current) return false;
       const complete = Boolean(remote.onboarding_completed_at);
+      const specialtyId = interests.find((item) => item.specialty_id)?.specialty_id;
+      const specialtyName = catalog.specialties.find((item) => item.id === specialtyId)?.name;
+      const specialty = SPECIALTIES.includes(specialtyName as Specialty)
+        ? (specialtyName as Specialty)
+        : undefined;
+      const topicIds = new Set(interests.flatMap((item) => (item.topic_id ? [item.topic_id] : [])));
       // Browser state remains a presentation cache. Only this authenticated,
       // server-derived profile result may update the cached completion flag.
       useDose.getState().applyRemoteProfile({
         name: remote.display_name ?? userDisplayName ?? "Colega",
         locale: remote.locale?.toLowerCase().startsWith("en") ? "en" : "pt",
         onboardingComplete: complete,
+        ...(specialty ? { specialty } : {}),
+        topics: catalog.topics.filter((item) => topicIds.has(item.id)).map((item) => item.name),
       });
       setRemoteOnboarding(complete ? "complete" : "incomplete");
       return complete;

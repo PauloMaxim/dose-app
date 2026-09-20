@@ -15,6 +15,7 @@ import { finishConfirmedIdentity, resolveConfirmedCallbackKind } from "./auth-ca
 import { reduceAuthSecurityState } from "./context.ts";
 import { privateCacheMustReset } from "./app-access.ts";
 import type { Session } from "@supabase/supabase-js";
+import { useDose } from "../store.ts";
 
 describe("Auth V1 security boundaries", () => {
   it("accepts only same-origin relative return destinations", () => {
@@ -117,13 +118,35 @@ describe("Auth V1 security boundaries", () => {
     assert.equal(privateCacheMustReset("user-a", "user-b"), true);
     assert.equal(privateCacheMustReset("user-b", "user-b"), false);
   });
+  it("clears identity-bound profile and content while preserving a genuine visitor draft", () => {
+    useDose.setState((state) => ({
+      ...state,
+      onboardingDraftReady: false,
+      profile: { ...state.profile, name: "Usuário A", topics: ["Diabetes"] },
+      saved: [{ articleId: "private-a", savedAt: "2026-01-01", liked: true, collectionIds: [] }],
+    }));
+    useDose.getState().clearPrivateSessionCache();
+    assert.equal(useDose.getState().profile.name, "Colega");
+    assert.deepEqual(useDose.getState().profile.topics, []);
+    assert.deepEqual(useDose.getState().saved, []);
+
+    useDose.setState((state) => ({
+      onboardingDraftReady: true,
+      profile: { ...state.profile, name: "Draft visitante", topics: ["Diabetes"] },
+    }));
+    useDose.getState().clearPrivateSessionCache();
+    assert.equal(useDose.getState().profile.name, "Draft visitante");
+    assert.deepEqual(useDose.getState().profile.topics, ["Diabetes"]);
+    useDose.getState().resetDemo();
+  });
   it("implements remote deletion only in a server module", async () => {
     const account = await readFile(
       new URL("../../server/domains/account.ts", import.meta.url),
       "utf8",
     );
-    assert.match(account, /auth\.admin\.deleteUser\(context\.userId\)/);
+    assert.match(account, /\{ userId: context\.userId, accessToken: context\.accessToken \}/);
     assert.match(account, /authMiddleware/);
+    assert.doesNotMatch(account, /validator\(|data\.userId|data\.user_id/);
   });
   it("stores versioned legal acceptance behind auth.uid and RLS", async () => {
     const migration = await readFile(
@@ -137,6 +160,24 @@ describe("Auth V1 security boundaries", () => {
     assert.match(migration, /privacy_version text not null/);
     assert.match(migration, /alter table public\.legal_acceptances enable row level security/);
     assert.match(migration, /values \(auth\.uid\(\), '2026-09-20', '2026-09-20'\)/);
+    assert.match(migration, /accept_current_legal_documents\(\)/);
+    assert.match(migration, /revoke all on table public\.legal_acceptances from public, anon/);
     assert.doesNotMatch(migration, /grant (insert|update|delete).*authenticated/i);
+  });
+  it("keeps plans and notification permission outside mandatory onboarding", async () => {
+    const onboarding = await readFile(
+      new URL("../../routes/onboarding.tsx", import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(onboarding, /Notification\.requestPermission/);
+    assert.doesNotMatch(onboarding, /navigate\(\{ to: "\/planos"/);
+    assert.doesNotMatch(onboarding, /planScreenSeen\s*&&|&&\s*profile\.planScreenSeen/);
+  });
+  it("constructs callbacks from the current origin without production localhost literals", async () => {
+    const client = await readFile(new URL("./client.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(client, /localhost|127\.0\.0\.1/);
+    assert.match(client, /confirmationRedirectPath\("signup"\)/);
+    assert.match(client, /confirmationRedirectPath\("recovery"\)/);
+    assert.match(client, /confirmationRedirectPath\("email-change"\)/);
   });
 });

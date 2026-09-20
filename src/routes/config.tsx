@@ -113,11 +113,19 @@ function ConfigPage() {
       return;
     }
     resetDemo();
-    await useDose.persist.clearStorage();
+    try {
+      await useDose.persist.clearStorage();
+    } catch {
+      // Continue to Auth cleanup even if browser storage is unavailable.
+    }
     resetDemo();
     try {
       await signOut("/onboarding");
     } catch {
+      // Supabase signOut clears deleted-user sessions on 401/403/404. If local
+      // Auth cleanup reports another transient failure, still force the public
+      // navigation with every Dose-owned private projection already cleared.
+      resetDemo();
       void navigate({ to: "/onboarding" });
     }
   }
