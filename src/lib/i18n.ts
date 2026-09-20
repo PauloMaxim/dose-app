@@ -34,10 +34,12 @@ const pt = {
   "settings.terms": "Fontes e termos",
   "settings.version": "Versão",
   "settings.logout": "Sair",
-  "settings.logout.hint": "A sessão encerra. Ofensiva, notas e visual ficam neste aparelho — entre de novo com o mesmo email.",
+  "settings.logout.hint":
+    "A sessão encerra. Ofensiva, notas e visual ficam neste aparelho — entre de novo com o mesmo email.",
   "settings.logout.confirm": "Encerrar sessão",
   "settings.delete": "Limpar cache local",
-  "settings.delete.hint": "Remove apenas o cache deste aparelho. Seus dados da conta permanecem no servidor.",
+  "settings.delete.hint":
+    "Remove apenas o cache deste aparelho. Seus dados da conta permanecem no servidor.",
   "settings.delete.confirm": "Confirmar limpeza",
   "settings.cancel": "Cancelar",
   "settings.save": "Salvar",
@@ -104,10 +106,12 @@ const en: typeof pt = {
   "settings.terms": "Sources and terms",
   "settings.version": "Version",
   "settings.logout": "Log out",
-  "settings.logout.hint": "This ends the session. Streak, notes and looks stay on this device — sign back in with the same email.",
+  "settings.logout.hint":
+    "This ends the session. Streak, notes and looks stay on this device — sign back in with the same email.",
   "settings.logout.confirm": "End session",
   "settings.delete": "Clear local cache",
-  "settings.delete.hint": "Removes only this device cache. Your account data remains on the server.",
+  "settings.delete.hint":
+    "Removes only this device cache. Your account data remains on the server.",
   "settings.delete.confirm": "Confirm clearing",
   "settings.cancel": "Cancel",
   "settings.save": "Save",
@@ -152,4 +156,25 @@ export function t(locale: AppLocale, key: I18nKey) {
 export function useT() {
   const locale = useDose((s) => s.profile.locale) ?? "pt";
   return (key: I18nKey) => t(locale, key);
+}
+
+/** Locale normalization is deliberately separate from scientific-content language. */
+export function toIntlLocale(locale: AppLocale): "pt-BR" | "en" {
+  return locale === "en" ? "en" : "pt-BR";
+}
+
+export function formatDate(
+  value: string | number | Date,
+  locale: AppLocale = "pt",
+  options: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" },
+) {
+  return new Intl.DateTimeFormat(toIntlLocale(locale), options).format(new Date(value));
+}
+
+export function formatNumber(
+  value: number,
+  locale: AppLocale = "pt",
+  options?: Intl.NumberFormatOptions,
+) {
+  return new Intl.NumberFormat(toIntlLocale(locale), options).format(value);
 }
