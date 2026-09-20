@@ -1,11 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { AuthShell, fieldClass } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
-import { friendlyAuthError, PASSWORD_MIN_LENGTH } from "@/lib/auth/auth-flow";
-import { getCurrentSession, requestPasswordReset, updatePassword } from "@/lib/auth/client";
+import {
+  canResetPassword,
+  friendlyAuthError,
+  PASSWORD_MIN_LENGTH,
+  RECOVERY_SUCCESS_DESTINATION,
+} from "@/lib/auth/auth-flow";
+import { requestPasswordReset, updatePassword } from "@/lib/auth/client";
+import { AuthContext } from "@/lib/auth/context";
 export const Route = createFileRoute("/auth/reset-password")({ component: ResetPassword });
 function ResetPassword() {
+  const { session, recoveryUserId, consumeRecovery, isPending } = useContext(AuthContext);
   const request =
     typeof window !== "undefined" && new URLSearchParams(location.search).get("request") === "1";
   const [email, setEmail] = useState("");
@@ -33,7 +40,7 @@ function ResetPassword() {
       );
       return;
     }
-    if (!(await getCurrentSession())) {
+    if (!canResetPassword(recoveryUserId, session?.user.id ?? null)) {
       setBusy(false);
       setError("Este link não é válido, expirou ou já foi utilizado.");
       return;
@@ -41,7 +48,11 @@ function ResetPassword() {
     const result = await updatePassword(password);
     setBusy(false);
     if (result.error) setError(friendlyAuthError(result.error));
-    else setMessage("Senha atualizada com sucesso. Você já pode continuar.");
+    else {
+      consumeRecovery();
+      setMessage("Senha atualizada com sucesso.");
+      window.location.replace(RECOVERY_SUCCESS_DESTINATION);
+    }
   }
   return (
     <AuthShell
@@ -52,64 +63,79 @@ function ResetPassword() {
           : "Escolha uma nova senha para sua conta."
       }
     >
-      <form className="space-y-4" onSubmit={(e) => void submit(e)}>
-        {request ? (
-          <>
-            <label htmlFor="recovery-email" className="block text-sm font-medium">
-              E-mail
-            </label>
-            <input
-              id="recovery-email"
-              className={fieldClass}
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </>
-        ) : (
-          <>
-            <label htmlFor="new-password" className="block text-sm font-medium">
-              Nova senha
-            </label>
-            <input
-              id="new-password"
-              className={fieldClass}
-              type="password"
-              autoComplete="new-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-            <label htmlFor="confirm-password" className="block text-sm font-medium">
-              Confirmar senha
-            </label>
-            <input
-              id="confirm-password"
-              className={fieldClass}
-              type="password"
-              autoComplete="new-password"
-              required
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-            />
-          </>
-        )}
-        {error && (
+      {!request && !isPending && !canResetPassword(recoveryUserId, session?.user.id ?? null) ? (
+        <div className="space-y-3">
           <p role="alert" className="text-sm text-danger">
-            {error}
+            Este acesso não veio de um link válido de recuperação.
           </p>
-        )}
-        {message && (
-          <p role="status" className="text-sm text-muted">
-            {message}
-          </p>
-        )}
-        <Button size="lg" className="w-full" disabled={busy}>
-          {busy ? "Aguarde…" : request ? "Enviar instruções" : "Atualizar senha"}
-        </Button>
-      </form>
+          <Link
+            to="/auth/reset-password"
+            search={{ request: "1" } as never}
+            className="flex min-h-11 items-center justify-center rounded-xl bg-card"
+          >
+            Solicitar novo link
+          </Link>
+        </div>
+      ) : (
+        <form className="space-y-4" onSubmit={(e) => void submit(e)}>
+          {request ? (
+            <>
+              <label htmlFor="recovery-email" className="block text-sm font-medium">
+                E-mail
+              </label>
+              <input
+                id="recovery-email"
+                className={fieldClass}
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </>
+          ) : (
+            <>
+              <label htmlFor="new-password" className="block text-sm font-medium">
+                Nova senha
+              </label>
+              <input
+                id="new-password"
+                className={fieldClass}
+                type="password"
+                autoComplete="new-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <label htmlFor="confirm-password" className="block text-sm font-medium">
+                Confirmar senha
+              </label>
+              <input
+                id="confirm-password"
+                className={fieldClass}
+                type="password"
+                autoComplete="new-password"
+                required
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+              />
+            </>
+          )}
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+          {message && (
+            <p role="status" className="text-sm text-muted">
+              {message}
+            </p>
+          )}
+          <Button size="lg" className="w-full" disabled={busy}>
+            {busy ? "Aguarde…" : request ? "Enviar instruções" : "Atualizar senha"}
+          </Button>
+        </form>
+      )}
       <Link to="/login" className="mt-4 flex min-h-11 items-center justify-center text-sm">
         Voltar para entrar
       </Link>

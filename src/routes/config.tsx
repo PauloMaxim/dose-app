@@ -54,6 +54,7 @@ function ConfigPage() {
   const [nameDraft, setNameDraft] = useState(profile.name);
   const [userDraft, setUserDraft] = useState(profile.username || slugUsername(profile.name));
   const [emailDraft, setEmailDraft] = useState(user?.primaryEmail ?? "");
+  const [emailPassword, setEmailPassword] = useState("");
   const [curPass, setCurPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [newPassConfirm, setNewPassConfirm] = useState("");
@@ -257,9 +258,21 @@ function ConfigPage() {
           >
             <input
               type="email"
+              autoComplete="email"
               value={emailDraft}
               onChange={(e) => setEmailDraft(e.target.value)}
               className="h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
+            />
+            <label htmlFor="email-current-password" className="mt-2 block text-xs text-muted">
+              Confirme sua senha atual
+            </label>
+            <input
+              id="email-current-password"
+              type="password"
+              autoComplete="current-password"
+              value={emailPassword}
+              onChange={(e) => setEmailPassword(e.target.value)}
+              className="mt-1 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
             />
             <Button
               size="sm"
@@ -269,6 +282,11 @@ function ConfigPage() {
                   setFormMsg("");
                   const next = emailDraft.trim();
                   if (!next.includes("@")) return;
+                  const verified = await reauthenticatePassword(emailPassword);
+                  if (verified.error) {
+                    setFormMsg("A senha atual não confere. O e-mail não foi alterado.");
+                    return;
+                  }
                   const { error } = await updateEmail(next);
                   setFormMsg(
                     error
@@ -541,12 +559,20 @@ function ConfigPage() {
           {open === "help" && (
             <Copy>Uma edição por dia, 10–15 minutos. Lê, a Lúmen come, a ofensiva segue.</Copy>
           )}
-          <Link to="/privacidade" className="flex min-h-12 items-center gap-3 px-4 py-3.5">
+          <Link
+            to="/privacidade"
+            search={{ from: "config" } as never}
+            className="flex min-h-12 items-center gap-3 px-4 py-3.5"
+          >
             <Shield className="size-5 text-muted" />
             <span className="flex-1 text-sm font-medium">Política de Privacidade</span>
             <ChevronRight className="size-4 text-subtle" />
           </Link>
-          <Link to="/termos" className="flex min-h-12 items-center gap-3 px-4 py-3.5">
+          <Link
+            to="/termos"
+            search={{ from: "config" } as never}
+            className="flex min-h-12 items-center gap-3 px-4 py-3.5"
+          >
             <FileText className="size-5 text-muted" />
             <span className="flex-1 text-sm font-medium">Termos de Uso</span>
             <ChevronRight className="size-4 text-subtle" />

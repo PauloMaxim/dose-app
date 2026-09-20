@@ -18,11 +18,42 @@ export function authRedirect(path: string): string {
   return new URL(path, window.location.origin).toString();
 }
 
+export function confirmationRedirectPath(kind: Exclude<AuthCallbackKind, null>): string {
+  return `/auth/confirm?kind=${kind}`;
+}
+
 export function maskEmail(email: string): string {
   const [local, domain] = email.split("@");
   if (!local || !domain) return "seu e-mail";
   return `${local.slice(0, Math.min(2, local.length))}${"•".repeat(Math.max(2, local.length - 2))}@${domain}`;
 }
+
+export type AuthCallbackKind = "signup" | "recovery" | "email-change" | null;
+
+export function callbackDestination(
+  kind: AuthCallbackKind,
+): "/auth/reset-password" | "/" | "/onboarding" {
+  if (kind === "recovery") return "/auth/reset-password";
+  if (kind === "email-change") return "/";
+  return "/onboarding";
+}
+
+export function requiresLegalAcceptance(kind: AuthCallbackKind): boolean {
+  return kind === "signup";
+}
+
+export function legalReturnPath(from: string | null): "/config" | "/auth/signup" {
+  return from === "config" ? "/config" : "/auth/signup";
+}
+
+export function canResetPassword(
+  recoveryUserId: string | null,
+  sessionUserId: string | null,
+): boolean {
+  return Boolean(recoveryUserId && sessionUserId && recoveryUserId === sessionUserId);
+}
+
+export const RECOVERY_SUCCESS_DESTINATION = "/onboarding" as const;
 
 export function friendlyAuthError(
   error: unknown,

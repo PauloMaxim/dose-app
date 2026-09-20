@@ -10,7 +10,7 @@ import {
 import { useDose } from "../store";
 import { refreshMyContent } from "../user-content";
 import { readMyProfile } from "../../server/domains/user-data";
-import type { RemoteOnboardingState } from "./app-access";
+import { privateCacheMustReset, type RemoteOnboardingState } from "./app-access";
 import { AppAccessContext } from "./app-access-context";
 import { useCurrentUserState } from "./use-current-user";
 
@@ -24,7 +24,7 @@ export function AppAccessProvider({ children }: { children: ReactNode }) {
   const cacheOwner = useRef<string | null>(null);
 
   useLayoutEffect(() => {
-    if (isPending || !hydrated || cacheOwner.current === userId) return;
+    if (isPending || !hydrated || !privateCacheMustReset(cacheOwner.current, userId)) return;
     requestId.current += 1;
     useDose.getState().clearPrivateSessionCache();
     cacheOwner.current = userId;

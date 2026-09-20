@@ -1,7 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AuthShell } from "@/components/auth-shell";
+import { legalReturnPath } from "@/lib/auth/auth-flow";
 export const Route = createFileRoute("/termos")({ component: Terms });
 function Terms() {
+  const from =
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("from");
   return (
     <AuthShell title="Termos de Uso" description="Versão técnica: 2026-09-20">
       <article className="space-y-4 text-sm leading-relaxed text-muted">
@@ -17,7 +20,7 @@ function Terms() {
           orientação jurídica.
         </p>
       </article>
-      <Link to="/auth/signup" className="mt-8 flex min-h-11 items-center justify-center">
+      <Link to={legalReturnPath(from)} className="mt-8 flex min-h-11 items-center justify-center">
         Voltar
       </Link>
     </AuthShell>

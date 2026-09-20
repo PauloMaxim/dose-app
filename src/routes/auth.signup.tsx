@@ -116,11 +116,11 @@ function Signup() {
       </form>
       <p className="mt-4 text-xs leading-relaxed text-muted">
         Ao criar sua conta, você concorda com os{" "}
-        <Link to="/termos" className="underline">
+        <Link to="/termos" search={{ from: "signup" } as never} className="underline">
           Termos de Uso
         </Link>{" "}
         e reconhece nossa{" "}
-        <Link to="/privacidade" className="underline">
+        <Link to="/privacidade" search={{ from: "signup" } as never} className="underline">
           Política de Privacidade
         </Link>
         .

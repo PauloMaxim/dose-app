@@ -29,13 +29,17 @@ function VerifyEmail() {
     setBusy(true);
     const session = await getCurrentSession();
     setBusy(false);
-    if (session) window.location.assign("/onboarding");
+    if (session?.user.email_confirmed_at) window.location.assign("/onboarding");
     else setMessage("Ainda não encontramos a confirmação. Aguarde um instante e tente novamente.");
   }
   return (
     <AuthShell
       title="Confirme seu e-mail"
-      description={`Enviamos um link para ${maskEmail(email)}. Abra-o para concluir sua conta.`}
+      description={
+        email
+          ? `Enviamos um link para ${maskEmail(email)}. Abra-o para concluir sua conta.`
+          : "Abra o link de confirmação recebido por e-mail para concluir sua conta."
+      }
     >
       <div aria-live="polite">
         {message && <p className="mb-4 text-sm text-muted">{message}</p>}
@@ -43,13 +47,21 @@ function VerifyEmail() {
       <Button className="w-full" size="lg" disabled={busy} onClick={() => void checked()}>
         Já confirmei
       </Button>
-      <button
-        className="mt-3 min-h-11 w-full text-sm text-muted"
-        disabled={busy || cooldown > 0 || !email}
-        onClick={() => void resend()}
-      >
-        {cooldown > 0 ? `Reenviar em ${cooldown}s` : "Reenviar confirmação"}
-      </button>
+      {email && (
+        <button
+          className="mt-3 min-h-11 w-full text-sm text-muted"
+          disabled={busy || cooldown > 0}
+          onClick={() => void resend()}
+        >
+          {cooldown > 0 ? `Reenviar em ${cooldown}s` : "Reenviar confirmação"}
+        </button>
+      )}
+      <p className="mt-3 text-xs leading-relaxed text-muted">
+        Confirmou em outro dispositivo? Volte para entrar com seu e-mail e senha.
+      </p>
+      <Link to="/login" className="mt-2 flex min-h-11 items-center justify-center text-sm">
+        Voltar para entrar
+      </Link>
       <Link to="/auth/signup" className="mt-3 flex min-h-11 items-center justify-center text-sm">
         Corrigir e-mail
       </Link>

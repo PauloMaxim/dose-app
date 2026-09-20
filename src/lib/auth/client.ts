@@ -8,7 +8,7 @@ import {
   sendPasswordRecovery,
   setAccountPassword,
 } from "./auth-actions";
-import { authRedirect } from "./auth-flow";
+import { authRedirect, confirmationRedirectPath } from "./auth-flow";
 
 export const authEnabled = isSupabaseBrowserConfigured();
 export { GROK_PROVIDERS };
@@ -26,7 +26,7 @@ export async function signUpWithPassword(
     getSupabaseBrowserClient().auth,
     email,
     password,
-    authRedirect("/auth/confirm?kind=signup"),
+    authRedirect(confirmationRedirectPath("signup")),
     displayName,
   );
   return {
@@ -67,7 +67,7 @@ export async function signOut(redirectTo = "/"): Promise<void> {
 
 export async function requestPasswordReset(email: string): Promise<AuthResult> {
   if (!authEnabled) return { error: unavailable() };
-  const redirectTo = authRedirect("/auth/reset-password");
+  const redirectTo = authRedirect(confirmationRedirectPath("recovery"));
   const { error } = await sendPasswordRecovery(getSupabaseBrowserClient().auth, email, redirectTo);
   return { error: error ? new Error(error.message) : null };
 }
@@ -104,7 +104,7 @@ export async function updateEmail(email: string): Promise<AuthResult> {
   if (!authEnabled) return { error: unavailable() };
   const { data, error } = await getSupabaseBrowserClient().auth.updateUser(
     { email },
-    { emailRedirectTo: authRedirect("/auth/confirm?kind=email-change") },
+    { emailRedirectTo: authRedirect(confirmationRedirectPath("email-change")) },
   );
   return { error: error ? new Error(error.message) : null, user: data.user };
 }
@@ -114,7 +114,7 @@ export async function resendSignup(email: string): Promise<AuthResult> {
   const { error } = await getSupabaseBrowserClient().auth.resend({
     type: "signup",
     email,
-    options: { emailRedirectTo: authRedirect("/auth/confirm") },
+    options: { emailRedirectTo: authRedirect(confirmationRedirectPath("signup")) },
   });
   return { error: error ? new Error(error.message) : null };
 }
