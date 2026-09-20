@@ -1,7 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { authMiddleware } from "@/lib/auth/middleware";
+
+const rewriteInsightInputSchema = z
+  .object({ text: z.string().trim().min(1).max(5_000) })
+  .strict();
 
 export const rewriteInsight = createServerFn({ method: "POST" })
-  .validator((input: { text: string }) => input)
+  .middleware([authMiddleware])
+  .validator((input: unknown) => rewriteInsightInputSchema.parse(input))
   .handler(async ({ data }) => {
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) {

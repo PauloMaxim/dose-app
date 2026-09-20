@@ -43,3 +43,11 @@ test("browser bundle boundary contains no privileged server environment", async 
     /service.role|SUPABASE_SERVICE|STRIPE_SECRET|OPENAI_API/i,
   );
 });
+
+test("legacy AI rewrite operation requires authentication and bounded strict input", async () => {
+  const ai = await read("src/lib/ai.ts");
+  assert.match(ai, /middleware\(\[authMiddleware\]\)/);
+  assert.match(ai, /z\.string\(\)\.trim\(\)\.min\(1\)\.max\(5_000\)/);
+  assert.match(ai, /\.strict\(\)/);
+  assert.doesNotMatch(ai, /validator\(\(input: \{ text: string \}\) => input\)/);
+});
