@@ -39,6 +39,7 @@ vi.mock("@/server/domains/account", () => ({
 
 import { AuthContext } from "@/lib/auth/context";
 import { AppAccessContext } from "@/lib/auth/app-access-context";
+import { AppRouteGate } from "@/lib/auth/app-route-gate";
 import { Login } from "@/routes/login";
 import { Signup } from "@/routes/auth.signup";
 import { ResetPassword } from "@/routes/auth.reset-password";
@@ -50,6 +51,9 @@ async function renderAt(path: string) {
         value={{
           session: security.session,
           recoveryUserId: security.recoveryUserId,
+          recoveryPending: Boolean(
+            security.recoveryUserId && security.session?.user.id === security.recoveryUserId,
+          ),
           callbackUserId: null,
           consumeRecovery: security.consumeRecovery,
           isPending: false,
@@ -168,6 +172,48 @@ describe("critical auth forms", () => {
     expect(auth.updatePassword).toHaveBeenCalledWith("new-secure-password");
   });
 
+  it("keeps recovery pending when the password update fails", async () => {
+    security.session = { user: { id: "recovery-user" } } as Session;
+    security.recoveryUserId = "recovery-user";
+    const user = userEvent.setup();
+    await renderAt("/auth/reset-password");
+
+    await user.type(screen.getByLabelText("Nova senha"), "new-secure-password");
+    await user.type(screen.getByLabelText("Confirmar senha"), "new-secure-password");
+    await user.click(screen.getByRole("button", { name: "Atualizar senha" }));
+
+    expect(auth.updatePassword).toHaveBeenCalledWith("new-secure-password");
+    expect(security.consumeRecovery).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toBeTruthy();
+  });
+
+  it("consumes recovery only after the password update succeeds", async () => {
+    security.session = { user: { id: "recovery-user" } } as Session;
+    security.recoveryUserId = "recovery-user";
+    auth.updatePassword.mockImplementation(async () => {
+      expect(security.consumeRecovery).not.toHaveBeenCalled();
+      return { error: null };
+    });
+    const user = userEvent.setup();
+    await renderAt("/auth/reset-password");
+
+    await user.type(screen.getByLabelText("Nova senha"), "new-secure-password");
+    await user.type(screen.getByLabelText("Confirmar senha"), "new-secure-password");
+    await user.click(screen.getByRole("button", { name: "Atualizar senha" }));
+
+    expect(security.consumeRecovery).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a recovery identity that differs from the session user", async () => {
+    security.session = { user: { id: "signed-in-user" } } as Session;
+    security.recoveryUserId = "other-user";
+    await renderAt("/auth/reset-password");
+
+    expect(screen.queryByRole("button", { name: "Atualizar senha" })).toBeNull();
+    expect(auth.updatePassword).not.toHaveBeenCalled();
+    expect(security.consumeRecovery).not.toHaveBeenCalled();
+  });
+
   it("does not authorize password updates from a normal session or request=1", async () => {
     security.session = { user: { id: "signed-in-user" } } as Session;
     await renderAt("/auth/reset-password");
@@ -181,5 +227,107 @@ describe("critical auth forms", () => {
     expect(screen.queryByRole("button", { name: "Atualizar senha" })).toBeNull();
     expect(screen.getByRole("button", { name: "Enviar instruções" })).toBeTruthy();
     expect(auth.updatePassword).not.toHaveBeenCalled();
+  });
+});
+
+async function renderGatedAt(path: string, remoteOnboarding: "complete" | "idle" = "complete") {
+  const rootRoute = createRootRoute({
+    component: () => (
+      <AuthContext.Provider
+        value={{
+          session: security.session,
+          recoveryUserId: security.recoveryUserId,
+          recoveryPending: Boolean(
+            security.recoveryUserId && security.session?.user.id === security.recoveryUserId,
+          ),
+          callbackUserId: null,
+          consumeRecovery: security.consumeRecovery,
+          isPending: false,
+        }}
+      >
+        <AppAccessContext.Provider
+          value={{ remoteOnboarding, refreshRemoteProfile: async () => false }}
+        >
+          <AppRouteGate>
+            <Outlet />
+          </AppRouteGate>
+        </AppAccessContext.Provider>
+      </AuthContext.Provider>
+    ),
+  });
+  const homeRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/",
+    component: () => <h1>Home protegida</h1>,
+  });
+  const articlesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/artigos",
+    component: () => <h1>Artigos protegidos</h1>,
+  });
+  const loginRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/login",
+    component: Login,
+  });
+  const resetRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/auth/reset-password",
+    component: () => <h1>Corredor de recuperação</h1>,
+  });
+  const router = new (await import("@tanstack/react-router")).Router({
+    routeTree: rootRoute.addChildren([homeRoute, articlesRoute, loginRoute, resetRoute]),
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  render(<RouterProvider router={router} />);
+  await waitFor(() => expect(router.state.status).toBe("idle"));
+  return router;
+}
+
+describe("password recovery access corridor", () => {
+  beforeEach(() => {
+    security.session = { user: { id: "recovery-user", user_metadata: {} } } as Session;
+    security.recoveryUserId = "recovery-user";
+  });
+
+  it("does not release Home even when remote onboarding is complete", async () => {
+    const router = await renderGatedAt("/");
+
+    await screen.findByRole("heading", { name: "Corredor de recuperação" });
+    expect(router.state.location.pathname).toBe("/auth/reset-password");
+    expect(screen.queryByRole("heading", { name: "Home protegida" })).toBeNull();
+  });
+
+  it("does not allow login to bypass pending recovery", async () => {
+    const router = await renderGatedAt("/login");
+
+    await screen.findByRole("heading", { name: "Corredor de recuperação" });
+    expect(router.state.location.pathname).toBe("/auth/reset-password");
+  });
+
+  it("denies a manually entered protected route", async () => {
+    const router = await renderGatedAt("/artigos");
+
+    await screen.findByRole("heading", { name: "Corredor de recuperação" });
+    expect(router.state.location.pathname).toBe("/auth/reset-password");
+    expect(screen.queryByRole("heading", { name: "Artigos protegidos" })).toBeNull();
+  });
+
+  it("continues blocking protected routes after in-app navigation", async () => {
+    const router = await renderGatedAt("/");
+    await screen.findByRole("heading", { name: "Corredor de recuperação" });
+
+    await router.navigate({ to: "/artigos" });
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/auth/reset-password"));
+    expect(screen.queryByRole("heading", { name: "Artigos protegidos" })).toBeNull();
+  });
+
+  it("keeps normal signed-in sessions on the ordinary access path", async () => {
+    security.recoveryUserId = null;
+    const router = await renderGatedAt("/");
+
+    await screen.findByRole("heading", { name: "Home protegida" });
+    expect(router.state.location.pathname).toBe("/");
   });
 });

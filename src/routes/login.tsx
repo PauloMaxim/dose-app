@@ -1,16 +1,18 @@
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { AuthShell, fieldClass } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { friendlyAuthError, safeReturnTo } from "@/lib/auth/auth-flow";
 import { signInWithPassword } from "@/lib/auth/client";
 import { useAppAccess } from "@/lib/auth/app-access-context";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { AuthContext } from "@/lib/auth/context";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
 export function Login() {
   const { user, isPending } = useCurrentUserState();
+  const { recoveryPending } = useContext(AuthContext);
   const { remoteOnboarding } = useAppAccess();
   const navigate = useNavigate();
   const params =
@@ -23,6 +25,7 @@ export function Login() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  if (recoveryPending) return <Navigate to="/auth/reset-password" replace />;
   if (isPending || (user && ["idle", "loading"].includes(remoteOnboarding)))
     return (
       <main className="grid h-full place-items-center bg-bg" aria-busy="true">

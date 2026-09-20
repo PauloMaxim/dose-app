@@ -24,6 +24,7 @@ export type AuthContextValue = {
   session: Session | null;
   isPending: boolean;
   recoveryUserId: string | null;
+  recoveryPending: boolean;
   callbackUserId: string | null;
   consumeRecovery: () => void;
 };
@@ -31,6 +32,7 @@ export const AuthContext = createContext<AuthContextValue>({
   session: null,
   isPending: true,
   recoveryUserId: null,
+  recoveryPending: false,
   callbackUserId: null,
   consumeRecovery: () => undefined,
 });

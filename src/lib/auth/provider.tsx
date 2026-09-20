@@ -2,6 +2,7 @@ import type { Session } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { getSupabaseBrowserClient } from "../supabase/client";
 import { authEnabled } from "./client";
+import { canResetPassword } from "./auth-flow";
 import { AuthContext, reduceAuthSecurityState } from "./context";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -56,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isPending,
       recoveryUserId: security.recoveryUserId,
+      recoveryPending: canResetPassword(security.recoveryUserId, session?.user.id ?? null),
       callbackUserId: security.callbackUserId,
       consumeRecovery: () => setSecurity((current) => ({ ...current, recoveryUserId: null })),
     }),
