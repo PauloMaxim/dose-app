@@ -9,6 +9,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import type { Session } from "@supabase/supabase-js";
+import { useContext } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const auth = vi.hoisted(() => ({
@@ -19,6 +20,28 @@ const auth = vi.hoisted(() => ({
   acceptCurrentLegalDocuments: vi.fn(),
 }));
 
+const supabase = vi.hoisted(() => {
+  const listeners: Array<(event: string, session: Session | null) => void> = [];
+  return {
+    listeners,
+    getSession: vi.fn(),
+    exchangeCodeForSession: vi.fn(),
+    onAuthStateChange: vi.fn((callback: (event: string, session: Session | null) => void) => {
+      listeners.push(callback);
+      return {
+        data: {
+          subscription: {
+            unsubscribe: vi.fn(() => {
+              const index = listeners.indexOf(callback);
+              if (index >= 0) listeners.splice(index, 1);
+            }),
+          },
+        },
+      };
+    }),
+  };
+});
+
 const security = vi.hoisted(() => ({
   session: null as Session | null,
   recoveryUserId: null as string | null,
@@ -26,11 +49,15 @@ const security = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/auth/client", () => ({
-  authEnabled: false,
+  authEnabled: true,
   signInWithPassword: auth.signInWithPassword,
   signUpWithPassword: auth.signUpWithPassword,
   requestPasswordReset: auth.requestPasswordReset,
   updatePassword: auth.updatePassword,
+}));
+
+vi.mock("@/lib/supabase/client", () => ({
+  getSupabaseBrowserClient: () => ({ auth: supabase }),
 }));
 
 vi.mock("@/server/domains/account", () => ({
@@ -40,9 +67,11 @@ vi.mock("@/server/domains/account", () => ({
 import { AuthContext } from "@/lib/auth/context";
 import { AppAccessContext } from "@/lib/auth/app-access-context";
 import { AppRouteGate } from "@/lib/auth/app-route-gate";
+import { AuthProvider } from "@/lib/auth/provider";
 import { Login } from "@/routes/login";
 import { Signup } from "@/routes/auth.signup";
 import { ResetPassword } from "@/routes/auth.reset-password";
+import { Confirm } from "@/routes/auth.confirm";
 
 async function renderAt(path: string) {
   const rootRoute = createRootRoute({
@@ -55,6 +84,8 @@ async function renderAt(path: string) {
             security.recoveryUserId && security.session?.user.id === security.recoveryUserId,
           ),
           callbackUserId: null,
+          hasRecoveryProof: (userId) => security.recoveryUserId === userId,
+          hasCallbackProof: () => false,
           consumeRecovery: security.consumeRecovery,
           isPending: false,
         }}
@@ -100,6 +131,9 @@ beforeEach(() => {
   auth.requestPasswordReset.mockResolvedValue({ error: null });
   auth.updatePassword.mockResolvedValue({ error: new Error("expected test stop") });
   auth.acceptCurrentLegalDocuments.mockResolvedValue(undefined);
+  supabase.listeners.splice(0);
+  supabase.getSession.mockResolvedValue({ data: { session: null }, error: null });
+  supabase.exchangeCodeForSession.mockReset();
 });
 
 afterEach(cleanup);
@@ -241,6 +275,8 @@ async function renderGatedAt(path: string, remoteOnboarding: "complete" | "idle"
             security.recoveryUserId && security.session?.user.id === security.recoveryUserId,
           ),
           callbackUserId: null,
+          hasRecoveryProof: (userId) => security.recoveryUserId === userId,
+          hasCallbackProof: () => false,
           consumeRecovery: security.consumeRecovery,
           isPending: false,
         }}
@@ -331,3 +367,85 @@ describe("password recovery access corridor", () => {
     expect(router.state.location.pathname).toBe("/");
   });
 });
+
+describe("integrated password recovery callback", () => {
+  it("preserves provider proof across the SPA transition from confirm to reset", async () => {
+    const recoverySession = {
+      user: { id: "callback-recovery-user", user_metadata: {} },
+    } as Session;
+    supabase.exchangeCodeForSession.mockImplementation(async () => {
+      // The provider was mounted on the preceding route. Deliberately deliver
+      // the event only to it to exercise the callback-listener race fallback.
+      supabase.listeners[0]?.("PASSWORD_RECOVERY", recoverySession);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return { data: { user: recoverySession.user }, error: null };
+    });
+    auth.updatePassword.mockResolvedValue({ error: null });
+
+    const rootRoute = createRootRoute({
+      component: () => (
+        <AuthProvider>
+          <AppAccessContext.Provider
+            value={{ remoteOnboarding: "complete", refreshRemoteProfile: async () => true }}
+          >
+            <RecoveryState />
+            <AppRouteGate>
+              <Outlet />
+            </AppRouteGate>
+          </AppAccessContext.Provider>
+        </AuthProvider>
+      ),
+    });
+    const startRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/start",
+      component: () => <h1>Início</h1>,
+    });
+    const confirmRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/auth/confirm",
+      component: Confirm,
+    });
+    const resetRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/auth/reset-password",
+      component: () => <ResetPassword request={false} />,
+    });
+    const homeRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/",
+      component: () => <h1>Home integrada</h1>,
+    });
+    const router = new (await import("@tanstack/react-router")).Router({
+      routeTree: rootRoute.addChildren([startRoute, confirmRoute, resetRoute, homeRoute]),
+      history: createMemoryHistory({ initialEntries: ["/start"] }),
+    });
+    render(<RouterProvider router={router} />);
+    await screen.findByRole("heading", { name: "Início" });
+    await waitFor(() => expect(supabase.listeners).toHaveLength(1));
+
+    window.history.replaceState({}, "", "/auth/confirm?kind=recovery&code=legitimate-code");
+    await router.navigate({ to: "/auth/confirm" });
+
+    await screen.findByRole("heading", { name: "Criar nova senha" });
+    expect(router.state.location.pathname).toBe("/auth/reset-password");
+    expect(screen.getByTestId("recovery-state").textContent).toBe("pending");
+    expect(screen.queryByRole("heading", { name: "Home integrada" })).toBeNull();
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Nova senha"), "new-secure-password");
+    await user.type(screen.getByLabelText("Confirmar senha"), "new-secure-password");
+    await user.click(screen.getByRole("button", { name: "Atualizar senha" }));
+
+    expect(auth.updatePassword).toHaveBeenCalledWith("new-secure-password");
+    await waitFor(() => expect(screen.getByTestId("recovery-state").textContent).toBe("clear"));
+
+    await router.navigate({ to: "/" });
+    await screen.findByRole("heading", { name: "Home integrada" });
+  });
+});
+
+function RecoveryState() {
+  const { recoveryPending } = useContext(AuthContext);
+  return <output data-testid="recovery-state">{recoveryPending ? "pending" : "clear"}</output>;
+}

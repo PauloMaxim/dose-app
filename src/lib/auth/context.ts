@@ -26,6 +26,8 @@ export type AuthContextValue = {
   recoveryUserId: string | null;
   recoveryPending: boolean;
   callbackUserId: string | null;
+  hasRecoveryProof: (userId: string) => boolean;
+  hasCallbackProof: (userId: string) => boolean;
   consumeRecovery: () => void;
 };
 export const AuthContext = createContext<AuthContextValue>({
@@ -34,5 +36,7 @@ export const AuthContext = createContext<AuthContextValue>({
   recoveryUserId: null,
   recoveryPending: false,
   callbackUserId: null,
+  hasRecoveryProof: () => false,
+  hasCallbackProof: () => false,
   consumeRecovery: () => undefined,
 });
