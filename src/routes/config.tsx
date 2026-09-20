@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   AtSign,
@@ -21,7 +21,7 @@ import { useState, type ReactNode } from "react";
 import { AvatarEdit } from "@/components/avatar";
 import { formatClock, TimePicker } from "@/components/time-picker";
 import { Button } from "@/components/ui/button";
-import { changePassword, signOut, updateEmail } from "@/lib/auth/client";
+import { changePassword, reauthenticatePassword, signOut, updateEmail } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useT } from "@/lib/i18n";
 import { planName } from "@/lib/plans";
@@ -30,6 +30,7 @@ import { useDose } from "@/lib/store";
 import type { AppLocale, ThemeMode, TitlePrefix } from "@/lib/types";
 import { cn, slugUsername } from "@/lib/utils";
 import { updateMyProfile } from "@/server/domains/user-data";
+import { deleteMyAccount } from "@/server/domains/account";
 
 export const Route = createFileRoute("/config")({
   component: ConfigPage,
@@ -55,6 +56,9 @@ function ConfigPage() {
   const [emailDraft, setEmailDraft] = useState(user?.primaryEmail ?? "");
   const [curPass, setCurPass] = useState("");
   const [newPass, setNewPass] = useState("");
+  const [newPassConfirm, setNewPassConfirm] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deletePhrase, setDeletePhrase] = useState("");
   const [formMsg, setFormMsg] = useState("");
   const [customGoal, setCustomGoal] = useState(
     GOAL_PRESETS.includes(profile.dailyGoalMin) ? "" : String(profile.dailyGoalMin),
@@ -88,6 +92,25 @@ function ConfigPage() {
 
   async function wipe() {
     setLeaving(true);
+    setFormMsg("");
+    if (!deletePassword || deletePhrase !== "EXCLUIR") {
+      setFormMsg("Informe sua senha e digite EXCLUIR para confirmar.");
+      setLeaving(false);
+      return;
+    }
+    const verified = await reauthenticatePassword(deletePassword);
+    if (verified.error) {
+      setFormMsg("A senha atual não confere. A conta não foi excluída.");
+      setLeaving(false);
+      return;
+    }
+    try {
+      await deleteMyAccount();
+    } catch {
+      setFormMsg("Não foi possível excluir sua conta agora. Tente novamente.");
+      setLeaving(false);
+      return;
+    }
     resetDemo();
     await useDose.persist.clearStorage();
     resetDemo();
@@ -103,7 +126,8 @@ function ConfigPage() {
       ? t("settings.off")
       : formatClock(profile.reminderHour, profile.reminderMinute || 0);
 
-  const planLabel = profile.plan === "free" ? t("settings.free") : planName(profile.plan, profile.locale);
+  const planLabel =
+    profile.plan === "free" ? t("settings.free") : planName(profile.plan, profile.locale);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-bg">
@@ -166,7 +190,11 @@ function ConfigPage() {
           >
             <div className="mb-2 flex gap-2">
               {(["Dra.", "Dr."] as const).map((x) => (
-                <Chip key={x} on={profile.title === x} onClick={() => update({ title: x as TitlePrefix })}>
+                <Chip
+                  key={x}
+                  on={profile.title === x}
+                  onClick={() => update({ title: x as TitlePrefix })}
+                >
                   {x}
                 </Chip>
               ))}
@@ -201,7 +229,9 @@ function ConfigPage() {
           >
             <input
               value={userDraft}
-              onChange={(e) => setUserDraft(e.target.value.replace(/[^a-zA-Z0-9._]/g, "").slice(0, 20))}
+              onChange={(e) =>
+                setUserDraft(e.target.value.replace(/[^a-zA-Z0-9._]/g, "").slice(0, 20))
+              }
               className="h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
             />
             <p className="mt-1 text-[11px] text-subtle">{t("settings.username.hint")}</p>
@@ -240,13 +270,19 @@ function ConfigPage() {
                   const next = emailDraft.trim();
                   if (!next.includes("@")) return;
                   const { error } = await updateEmail(next);
-                  setFormMsg(error ? "Não deu para alterar o email." : "Email atualizado.");
+                  setFormMsg(
+                    error
+                      ? "Não foi possível solicitar a alteração do e-mail."
+                      : "Alteração solicitada. Confirme o novo endereço antes que ele seja atualizado.",
+                  );
                 })();
               }}
             >
               {t("settings.save")}
             </Button>
-            {formMsg && open === "email" && <p className="mt-1 text-[11px] text-muted">{formMsg}</p>}
+            {formMsg && open === "email" && (
+              <p className="mt-1 text-[11px] text-muted">{formMsg}</p>
+            )}
           </EditRow>
           <EditRow
             icon={<Lock className="size-5 text-muted" />}
@@ -269,18 +305,35 @@ function ConfigPage() {
               onChange={(e) => setNewPass(e.target.value)}
               className="mt-2 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
             />
+            <input
+              type="password"
+              aria-label="Confirmar nova senha"
+              autoComplete="new-password"
+              placeholder="Confirmar nova senha"
+              value={newPassConfirm}
+              onChange={(e) => setNewPassConfirm(e.target.value)}
+              className="mt-2 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
+            />
             <Button
               size="sm"
               className="mt-2"
               onClick={() => {
                 void (async () => {
                   setFormMsg("");
+                  if (newPass !== newPassConfirm) {
+                    setFormMsg("As senhas não coincidem.");
+                    return;
+                  }
                   if (newPass.length < 8) {
                     setFormMsg("A nova senha precisa de 8 caracteres.");
                     return;
                   }
                   const { error } = await changePassword(curPass, newPass);
-                  setFormMsg(error ? "Não deu para alterar a senha." : "Senha atualizada.");
+                  setFormMsg(
+                    error
+                      ? "Não foi possível alterar a senha. Confira a senha atual."
+                      : "Senha atualizada com segurança.",
+                  );
                 })();
               }}
             >
@@ -338,10 +391,11 @@ function ConfigPage() {
                 <button
                   key={loc}
                   type="button"
-                    onClick={() => {
-                      update({ locale: loc });
-                      if (user) void updateMyProfile({ data: { locale: loc === "en" ? "en" : "pt-BR" } });
-                    }}
+                  onClick={() => {
+                    update({ locale: loc });
+                    if (user)
+                      void updateMyProfile({ data: { locale: loc === "en" ? "en" : "pt-BR" } });
+                  }}
                   className={cn(
                     "h-7 rounded-full px-3 text-[11px] font-semibold",
                     profile.locale === loc ? "tab-gradient text-on-accent" : "text-muted",
@@ -429,7 +483,11 @@ function ConfigPage() {
                 {REMIND_PRESETS.map((h) => (
                   <Chip
                     key={h}
-                    on={!customRemind && profile.reminderHour === h && (profile.reminderMinute || 0) === 0}
+                    on={
+                      !customRemind &&
+                      profile.reminderHour === h &&
+                      (profile.reminderMinute || 0) === 0
+                    }
                     onClick={() => {
                       setCustomRemind(false);
                       setPickHour(h);
@@ -475,24 +533,24 @@ function ConfigPage() {
           {t("settings.about")}
         </p>
         <div className="rounded-2xl bg-card">
-          <LinkRow icon={<CircleHelp className="size-5 text-muted" />} title={t("settings.help")} onClick={() => setOpen(open === "help" ? null : "help")} />
+          <LinkRow
+            icon={<CircleHelp className="size-5 text-muted" />}
+            title={t("settings.help")}
+            onClick={() => setOpen(open === "help" ? null : "help")}
+          />
           {open === "help" && (
-            <Copy>
-              Uma edição por dia, 10–15 minutos. Lê, a Lúmen come, a ofensiva segue.
-            </Copy>
+            <Copy>Uma edição por dia, 10–15 minutos. Lê, a Lúmen come, a ofensiva segue.</Copy>
           )}
-          <LinkRow icon={<Shield className="size-5 text-muted" />} title={t("settings.privacy")} onClick={() => setOpen(open === "privacy" ? null : "privacy")} />
-          {open === "privacy" && (
-            <Copy>
-              Ofensiva, notas e visual ficam neste aparelho. Conta Google, X ou email só guarda a sessão.
-            </Copy>
-          )}
-          <LinkRow icon={<FileText className="size-5 text-muted" />} title={t("settings.terms")} onClick={() => setOpen(open === "terms" ? null : "terms")} />
-          {open === "terms" && (
-            <Copy>
-              Todo item aponta para PubMed, NEJM, ESC ou Lancet. Os resumos não substituem o paper.
-            </Copy>
-          )}
+          <Link to="/privacidade" className="flex min-h-12 items-center gap-3 px-4 py-3.5">
+            <Shield className="size-5 text-muted" />
+            <span className="flex-1 text-sm font-medium">Política de Privacidade</span>
+            <ChevronRight className="size-4 text-subtle" />
+          </Link>
+          <Link to="/termos" className="flex min-h-12 items-center gap-3 px-4 py-3.5">
+            <FileText className="size-5 text-muted" />
+            <span className="flex-1 text-sm font-medium">Termos de Uso</span>
+            <ChevronRight className="size-4 text-subtle" />
+          </Link>
           <div className="flex items-center justify-between px-4 py-3.5">
             <span className="text-sm font-medium">{t("settings.version")}</span>
             <span className="text-sm text-muted">1.0.0</span>
@@ -503,11 +561,20 @@ function ConfigPage() {
           {confirmOut ? (
             <div className="px-4 py-4">
               <p className="text-sm text-muted">{t("settings.logout.hint")}</p>
-              <Button size="lg" className="mt-3 w-full" disabled={leaving} onClick={() => void logoutKeep()}>
+              <Button
+                size="lg"
+                className="mt-3 w-full"
+                disabled={leaving}
+                onClick={() => void logoutKeep()}
+              >
                 <LogOut className="size-4" />
                 {t("settings.logout.confirm")}
               </Button>
-              <button type="button" className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setConfirmOut(false)}>
+              <button
+                type="button"
+                className="mt-2 h-11 w-full text-sm text-muted"
+                onClick={() => setConfirmOut(false)}
+              >
                 {t("settings.cancel")}
               </button>
             </div>
@@ -530,10 +597,45 @@ function ConfigPage() {
           {confirmDel ? (
             <div className="rounded-2xl border border-danger/40 px-4 py-4">
               <p className="text-sm text-muted">{t("settings.delete.hint")}</p>
-              <Button size="lg" className="mt-3 w-full bg-danger text-on-accent" disabled={leaving} onClick={() => void wipe()}>
+              <label htmlFor="delete-password" className="mt-3 block text-sm font-medium">
+                Senha atual
+              </label>
+              <input
+                id="delete-password"
+                type="password"
+                autoComplete="current-password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                className="mt-1 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
+              />
+              <label htmlFor="delete-phrase" className="mt-3 block text-sm font-medium">
+                Digite EXCLUIR
+              </label>
+              <input
+                id="delete-phrase"
+                autoComplete="off"
+                value={deletePhrase}
+                onChange={(e) => setDeletePhrase(e.target.value)}
+                className="mt-1 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
+              />
+              {formMsg && (
+                <p role="alert" className="mt-2 text-sm text-danger">
+                  {formMsg}
+                </p>
+              )}
+              <Button
+                size="lg"
+                className="mt-3 w-full bg-danger text-on-accent"
+                disabled={leaving}
+                onClick={() => void wipe()}
+              >
                 {t("settings.delete.confirm")}
               </Button>
-              <button type="button" className="mt-2 h-11 w-full text-sm text-muted" onClick={() => setConfirmDel(false)}>
+              <button
+                type="button"
+                className="mt-2 h-11 w-full text-sm text-muted"
+                onClick={() => setConfirmDel(false)}
+              >
                 {t("settings.cancel")}
               </button>
             </div>
@@ -563,32 +665,50 @@ function EditRow({
   onToggle,
   children,
 }: {
-  icon: ReactNode
-  title: string
-  value: string
-  open: boolean
-  onToggle: () => void
-  children: ReactNode
+  icon: ReactNode;
+  title: string;
+  value: string;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
 }) {
   return (
     <>
       <div className="h-px bg-border" />
-      <button type="button" onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+      >
         {icon}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{title}</p>
           <p className="truncate text-xs text-muted">{value}</p>
         </div>
-        <ChevronRight className={cn("size-4 text-subtle transition-transform", open && "rotate-90")} />
+        <ChevronRight
+          className={cn("size-4 text-subtle transition-transform", open && "rotate-90")}
+        />
       </button>
       {open && <div className="px-4 pb-3">{children}</div>}
     </>
   );
 }
 
-function LinkRow({ icon, title, onClick }: { icon: ReactNode; title: string; onClick: () => void }) {
+function LinkRow({
+  icon,
+  title,
+  onClick,
+}: {
+  icon: ReactNode;
+  title: string;
+  onClick: () => void;
+}) {
   return (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+    >
       {icon}
       <span className="flex-1 text-sm font-medium">{title}</span>
       <ChevronRight className="size-4 text-subtle" />
@@ -600,7 +720,15 @@ function Copy({ children }: { children: ReactNode }) {
   return <p className="px-4 pb-3 text-[13px] leading-relaxed text-muted">{children}</p>;
 }
 
-function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+function Chip({
+  on,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"

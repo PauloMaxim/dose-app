@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useDose } from "../store";
 import { refreshMyContent } from "../user-content";
 import { readMyProfile } from "../../server/domains/user-data";
@@ -13,6 +21,14 @@ export function AppAccessProvider({ children }: { children: ReactNode }) {
   const hydrated = useDose((state) => state.hydrated);
   const [remoteOnboarding, setRemoteOnboarding] = useState<RemoteOnboardingState>("idle");
   const requestId = useRef(0);
+  const cacheOwner = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (isPending || !hydrated || cacheOwner.current === userId) return;
+    requestId.current += 1;
+    useDose.getState().clearPrivateSessionCache();
+    cacheOwner.current = userId;
+  }, [hydrated, isPending, userId]);
 
   const refreshRemoteProfile = useCallback(async () => {
     if (!userId) return false;
@@ -42,7 +58,6 @@ export function AppAccessProvider({ children }: { children: ReactNode }) {
     if (!userId) {
       requestId.current += 1;
       setRemoteOnboarding("idle");
-      useDose.getState().clearPrivateSessionCache();
       return;
     }
     void refreshRemoteProfile();

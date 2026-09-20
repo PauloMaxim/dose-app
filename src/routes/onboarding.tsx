@@ -135,7 +135,6 @@ function Onboarding() {
       !userId ||
       remoteOnboarding !== "incomplete" ||
       !draftReady ||
-      !profile.planScreenSeen ||
       !catalog ||
       !specialtyId ||
       saving
@@ -145,22 +144,13 @@ function Onboarding() {
     // finishOnboarding intentionally runs only once after all authoritative
     // inputs for a fresh, explicitly completed visitor draft are available.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    catalog,
-    draftReady,
-    hydrated,
-    profile.planScreenSeen,
-    remoteOnboarding,
-    saving,
-    specialtyId,
-    userId,
-  ]);
+  }, [catalog, draftReady, hydrated, remoteOnboarding, saving, specialtyId, userId]);
 
   function go(next: number) {
     setStep(Math.max(0, Math.min(LAST, next)));
   }
 
-  async function finishOnboarding(resumingAfterPlan = false) {
+  async function finishOnboarding(_resumingAfterPlan = false) {
     setPermError("");
     if (user) {
       if (!catalog || !specialtyId) {
@@ -200,8 +190,8 @@ function Onboarding() {
         tutorialComplete: false,
         username: name.trim() ? slugUsername(name.trim()) : profile.username || "dose",
       });
-      track("onboarding_complete", { dest: resumingAfterPlan ? "home" : "planos" });
-      void navigate({ to: resumingAfterPlan ? "/" : "/planos", replace: true });
+      track("onboarding_complete", { dest: "home" });
+      void navigate({ to: "/", replace: true });
       return;
     }
     saveDraft({
@@ -219,32 +209,14 @@ function Onboarding() {
       username: name.trim() ? slugUsername(name.trim()) : "dose",
       planScreenSeen: false,
     });
-    track("onboarding_complete", { dest: "planos" });
-    void navigate({ to: "/planos", replace: true });
+    track("onboarding_complete", { dest: "auth-ready" });
+    void navigate({ to: "/auth/ready", replace: true });
   }
 
   async function continueReminder() {
     setPermError("");
     setReminderHour(hour, hour == null ? 0 : minute);
     update({ reminderHour: hour, reminderMinute: hour == null ? 0 : minute });
-    if (hour != null && typeof Notification !== "undefined") {
-      if (Notification.permission === "default") {
-        track("onboarding_reminder_prompt");
-        try {
-          const result = await Notification.requestPermission();
-          track("onboarding_reminder_result", { result });
-          if (result !== "granted") {
-            setPermError(
-              "Sem permissão o aviso não chega. Você pode ligar depois em Configurações.",
-            );
-          }
-        } catch {
-          setPermError("Este aparelho não entrega aviso em segundo plano.");
-        }
-      } else if (Notification.permission === "denied") {
-        setPermError("O aviso está bloqueado no sistema. Siga sem ele por agora.");
-      }
-    }
     track("onboarding_continue", { step: LAST, hour: hour ?? -1 });
     await finishOnboarding();
   }
@@ -257,7 +229,7 @@ function Onboarding() {
     );
   }
 
-  if (user && draftReady && profile.planScreenSeen && permError) {
+  if (user && draftReady && permError) {
     return (
       <main className="flex h-full flex-col items-center justify-center bg-bg px-6 text-center">
         <Mascot mood="waiting" streak={0} size={112} />
@@ -385,7 +357,7 @@ function Onboarding() {
                 onClick={() => {
                   track("onboarding_continue", { step: 0, returning });
                   if (returning || draftReady) {
-                    void navigate({ to: returning ? "/" : "/planos" });
+                    void navigate({ to: returning ? "/" : "/auth/ready" });
                     return;
                   }
                   go(1);
