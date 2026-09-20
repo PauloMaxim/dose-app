@@ -22,6 +22,7 @@
     "test:billing": "tsx --test src/server/billing/billing.test.ts",
     "smoke:scientific": "tsx scripts/scientific-smoke.ts",
     "test:foundation": "node --test scripts/foundation-security.test.mjs scripts/rls-runtime.test.mjs",
+    "test:hardening": "node --test scripts/production-hardening.test.mjs && tsx --test src/lib/i18n.test.ts src/server/api/contracts.test.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

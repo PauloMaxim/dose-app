@@ -71,5 +71,44 @@ export const entitlementKeySchema = z
   .regex(/^[a-z0-9_.-]+$/);
 export const entitlementReadSchema = z.object({ key: entitlementKeySchema }).strict();
 
+export const notificationPreferencesSchema = z
+  .object({
+    emailEnabled: z.boolean(),
+    pushEnabled: z.boolean(),
+    digestFrequency: z.enum(["off", "daily", "weekly"]),
+    quietHoursStart: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .nullable(),
+    quietHoursEnd: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .nullable(),
+  })
+  .strict();
+
+export const pushSubscriptionSchema = z
+  .object({
+    endpoint: z
+      .string()
+      .url()
+      .max(2048)
+      .refine((url) => url.startsWith("https://")),
+    p256dh: z.string().min(16).max(512),
+    auth: z.string().min(8).max(512),
+    expiresAt: z.string().datetime().nullable().optional(),
+  })
+  .strict();
+
+export const pushUnsubscribeSchema = z
+  .object({
+    endpoint: z
+      .string()
+      .url()
+      .max(2048)
+      .refine((url) => url.startsWith("https://")),
+  })
+  .strict();
+
 // Intentionally absent: schemas that let clients create subscriptions,
 // payments, staff roles or entitlements. Those are server-owned resources.

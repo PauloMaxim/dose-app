@@ -4,6 +4,9 @@ import {
   interestsReplaceSchema,
   onboardingCompleteSchema,
   profileUpdateSchema,
+  notificationPreferencesSchema,
+  pushSubscriptionSchema,
+  pushUnsubscribeSchema,
 } from "../api/contracts";
 import { getSupabaseUserClient } from "../db/supabase.server";
 
@@ -103,4 +106,58 @@ export const readMyNotificationPreferences = createServerFn({ method: "GET" })
       .single();
     if (error) throw new Error("Não foi possível carregar as preferências.");
     return data;
+  });
+
+export const updateMyNotificationPreferences = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => notificationPreferencesSchema.parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { error } = await getSupabaseUserClient(context.accessToken)
+      .from("notification_preferences")
+      .upsert(
+        {
+          user_id: context.userId,
+          email_enabled: input.emailEnabled,
+          push_enabled: input.pushEnabled,
+          digest_frequency: input.digestFrequency,
+          quiet_hours_start: input.quietHoursStart,
+          quiet_hours_end: input.quietHoursEnd,
+        },
+        { onConflict: "user_id" },
+      );
+    if (error) throw new Error("Não foi possível atualizar as preferências.");
+    return { ok: true as const };
+  });
+
+export const registerMyPushSubscription = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => pushSubscriptionSchema.parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { error } = await getSupabaseUserClient(context.accessToken)
+      .from("push_subscriptions")
+      .upsert(
+        {
+          user_id: context.userId,
+          endpoint: input.endpoint,
+          p256dh: input.p256dh,
+          auth_key: input.auth,
+          expires_at: input.expiresAt ?? null,
+        },
+        { onConflict: "user_id,endpoint" },
+      );
+    if (error) throw new Error("Não foi possível registrar este dispositivo.");
+    return { ok: true as const };
+  });
+
+export const removeMyPushSubscription = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: unknown) => pushUnsubscribeSchema.parse(input))
+  .handler(async ({ data: input, context }) => {
+    const { error } = await getSupabaseUserClient(context.accessToken)
+      .from("push_subscriptions")
+      .delete()
+      .eq("user_id", context.userId)
+      .eq("endpoint", input.endpoint);
+    if (error) throw new Error("Não foi possível remover este dispositivo.");
+    return { ok: true as const };
   });

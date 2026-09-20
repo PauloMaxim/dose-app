@@ -2,13 +2,17 @@ import { Link } from "@tanstack/react-router";
 import { Droplet } from "lucide-react";
 import type { Article } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/i18n";
+import { useDose } from "@/lib/store";
+
+export const COVER_FALLBACK = "/covers/clear.jpg";
 
 export function StudyPill({
   children,
   className,
 }: {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <span
@@ -26,10 +30,12 @@ export function ArticleCover({
   src,
   alt,
   className,
+  priority = false,
 }: {
-  src: string
-  alt: string
-  className?: string
+  src: string;
+  alt: string;
+  className?: string;
+  priority?: boolean;
 }) {
   return (
     <img
@@ -37,6 +43,13 @@ export function ArticleCover({
       alt={alt}
       className={cn("h-full w-full object-cover", className)}
       crossOrigin="anonymous"
+      loading={priority ? "eager" : "lazy"}
+      fetchPriority={priority ? "high" : "auto"}
+      decoding="async"
+      onError={(event) => {
+        const image = event.currentTarget;
+        if (!image.src.endsWith(COVER_FALLBACK)) image.src = COVER_FALLBACK;
+      }}
     />
   );
 }
@@ -48,17 +61,17 @@ export function EditionCard({
   kicker,
   href,
 }: {
-  cover: string
-  title: string
-  dateLabel: string
-  kicker?: string
-  href: string
+  cover: string;
+  title: string;
+  dateLabel: string;
+  kicker?: string;
+  href: string;
 }) {
   return (
     <Link to={href} className="block">
       <div className="overflow-hidden rounded-2xl bg-card">
         <div className="aspect-[16/10] overflow-hidden">
-          <ArticleCover src={cover} alt="" />
+          <ArticleCover src={cover} alt="" priority />
         </div>
       </div>
       <div className="mt-3 flex items-start gap-2">
@@ -84,9 +97,9 @@ export function ArticleRow({
   minutes,
   completed,
 }: {
-  article: Article
-  minutes?: boolean
-  completed?: boolean
+  article: Article;
+  minutes?: boolean;
+  completed?: boolean;
 }) {
   return (
     <Link
@@ -113,6 +126,7 @@ export function ArticleRow({
 }
 
 export function CatalogCard({ article }: { article: Article }) {
+  const locale = useDose((state) => state.profile.locale);
   return (
     <Link to="/artigo/$id" params={{ id: article.id }} className="block pb-6">
       <div className="overflow-hidden rounded-2xl">
@@ -126,11 +140,7 @@ export function CatalogCard({ article }: { article: Article }) {
           <span>{article.title}</span>
         </h3>
         <p className="mt-1.5 pl-7 text-sm text-muted">
-          {new Date(article.publishedAt + "T12:00:00").toLocaleDateString("pt-BR", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}
+          {formatDate(`${article.publishedAt}T12:00:00`, locale)}
         </p>
         <div className="mt-2 flex items-center gap-2 pl-7">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-muted">

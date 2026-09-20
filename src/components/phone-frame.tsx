@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { AppTour } from "@/components/app-tour";
-import { ReminderHost } from "@/components/reminder-host";
 import { useDose } from "@/lib/store";
 
 export function PhoneFrame({ children }: { children: React.ReactNode }) {
@@ -60,7 +59,6 @@ export function PhoneFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="phone-shell relative flex flex-col overflow-hidden">
       <div className="flex h-full min-h-0 flex-1 flex-col">{children}</div>
-      <ReminderHost />
       <AppTour />
       {!hydrated && !ready && <Splash />}
     </div>
@@ -72,10 +70,7 @@ function Splash() {
     <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-bg">
       <div className="mb-4 flex size-16 items-center justify-center rounded-2xl tab-gradient">
         <svg viewBox="0 0 32 32" className="size-8" aria-hidden>
-          <path
-            d="M16 4c6 7 10 11 10 16a10 10 0 1 1-20 0c0-5 4-9 10-16Z"
-            fill="white"
-          />
+          <path d="M16 4c6 7 10 11 10 16a10 10 0 1 1-20 0c0-5 4-9 10-16Z" fill="white" />
           <path
             d="M8 19h4l2-4 3 8 2-4h5"
             stroke="#0A0A0B"
