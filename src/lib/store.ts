@@ -27,9 +27,7 @@ import { todayIso, uid } from "./utils";
 
 const LATER_ID = "later";
 
-export const DEFAULT_COLLECTIONS: Collection[] = [
-  { id: LATER_ID, name: "Ler mais tarde" },
-];
+export const DEFAULT_COLLECTIONS: Collection[] = [{ id: LATER_ID, name: "Ler mais tarde" }];
 
 const DEFAULT_PROFILE: Profile = {
   name: "Marina",
@@ -58,42 +56,45 @@ const DEFAULT_PROFILE: Profile = {
 };
 
 interface DoseState {
-  hydrated: boolean
-  profile: Profile
-  progress: Record<string, ReadingProgress>
-  logs: DayLog[]
-  insights: Insight[]
-  saved: SavedItem[]
-  collections: Collection[]
-  comments: PublicComment[]
-  ratings: Record<string, number>
-  openedSources: string[]
-  lastReminderDate: string | null
-  onboardingStep: number
-  setHydrated: () => void
-  completeOnboarding: (partial: Partial<Profile>) => void
-  updateProfile: (partial: Partial<Profile>) => void
-  setSpecialty: (s: Specialty) => void
-  setTitle: (t: TitlePrefix) => void
-  setLook: (partial: Partial<MascotLook>) => void
-  setOnboardingStep: (step: number) => void
-  completeTutorial: () => void
-  toggleTopic: (t: string) => void
-  setReminderHour: (hour: number | null, minute?: number) => void
-  markReminderFired: (date: string) => void
-  recordScroll: (articleId: string, pct: number) => void
-  completeArticle: (articleId: string) => void
-  toggleLike: (articleId: string) => void
-  saveToCollections: (articleId: string, collectionIds: string[]) => boolean
-  unsave: (articleId: string) => void
-  addCollection: (name: string) => string
-  addInsight: (articleId: string, text: string) => void
-  updateInsight: (id: string, text: string) => void
-  deleteInsight: (id: string) => void
-  addComment: (articleId: string, text: string, rating: number) => void
-  setRating: (articleId: string, rating: number) => void
-  markSourceOpened: (articleId: string) => void
-  resetDemo: () => void
+  hydrated: boolean;
+  profile: Profile;
+  progress: Record<string, ReadingProgress>;
+  logs: DayLog[];
+  insights: Insight[];
+  saved: SavedItem[];
+  collections: Collection[];
+  comments: PublicComment[];
+  ratings: Record<string, number>;
+  openedSources: string[];
+  lastReminderDate: string | null;
+  onboardingStep: number;
+  onboardingDraftReady: boolean;
+  setHydrated: () => void;
+  saveOnboardingDraft: (partial: Partial<Profile>) => void;
+  applyRemoteProfile: (partial: Pick<Profile, "name" | "locale" | "onboardingComplete">) => void;
+  clearPrivateSessionCache: () => void;
+  updateProfile: (partial: Partial<Profile>) => void;
+  setSpecialty: (s: Specialty) => void;
+  setTitle: (t: TitlePrefix) => void;
+  setLook: (partial: Partial<MascotLook>) => void;
+  setOnboardingStep: (step: number) => void;
+  completeTutorial: () => void;
+  toggleTopic: (t: string) => void;
+  setReminderHour: (hour: number | null, minute?: number) => void;
+  markReminderFired: (date: string) => void;
+  recordScroll: (articleId: string, pct: number) => void;
+  completeArticle: (articleId: string) => void;
+  toggleLike: (articleId: string) => void;
+  saveToCollections: (articleId: string, collectionIds: string[]) => boolean;
+  unsave: (articleId: string) => void;
+  addCollection: (name: string) => string;
+  addInsight: (articleId: string, text: string) => void;
+  updateInsight: (id: string, text: string) => void;
+  deleteInsight: (id: string) => void;
+  addComment: (articleId: string, text: string, rating: number) => void;
+  setRating: (articleId: string, rating: number) => void;
+  markSourceOpened: (articleId: string) => void;
+  resetDemo: () => void;
 }
 
 function upsertToday(logs: DayLog[], mut: (log: DayLog) => void): DayLog[] {
@@ -142,17 +143,37 @@ export const useDose = create<DoseState>()(
       openedSources: [],
       lastReminderDate: null,
       onboardingStep: 0,
+      onboardingDraftReady: false,
       setHydrated: () => set({ hydrated: true }),
-      completeOnboarding: (partial) =>
+      saveOnboardingDraft: (partial) =>
         set((s) => ({
           onboardingStep: 0,
-          profile: { ...s.profile, ...partial, plan: s.profile.plan, onboardingComplete: true },
+          onboardingDraftReady: true,
+          // A finished local flow is still only a draft. Completion can only
+          // be applied from the authenticated remote profile below.
+          profile: { ...s.profile, ...partial, plan: s.profile.plan, onboardingComplete: false },
         })),
+      applyRemoteProfile: (partial) =>
+        set((s) => ({
+          profile: { ...s.profile, ...partial, plan: "free" },
+          onboardingDraftReady: partial.onboardingComplete ? false : s.onboardingDraftReady,
+        })),
+      clearPrivateSessionCache: () =>
+        set({
+          progress: {},
+          logs: [],
+          insights: [],
+          saved: [],
+          collections: DEFAULT_COLLECTIONS,
+          comments: [],
+          ratings: {},
+          openedSources: [],
+          lastReminderDate: null,
+        }),
       updateProfile: (partial) =>
         // Local callers may update presentation preferences, never billing authority.
         set((s) => ({ profile: { ...s.profile, ...partial, plan: s.profile.plan } })),
-      setSpecialty: (specialty) =>
-        set((s) => ({ profile: { ...s.profile, specialty } })),
+      setSpecialty: (specialty) => set((s) => ({ profile: { ...s.profile, specialty } })),
       setTitle: (title) => set((s) => ({ profile: { ...s.profile, title } })),
       setLook: (partial) =>
         set((s) => ({
@@ -172,9 +193,7 @@ export const useDose = create<DoseState>()(
           return {
             profile: {
               ...s.profile,
-              topics: has
-                ? s.profile.topics.filter((x) => x !== t)
-                : [...s.profile.topics, t],
+              topics: has ? s.profile.topics.filter((x) => x !== t) : [...s.profile.topics, t],
             },
           };
         }),
@@ -255,9 +274,7 @@ export const useDose = create<DoseState>()(
             return { saved: s.saved.filter((x) => x.articleId !== articleId) };
           }
           return {
-            saved: s.saved.map((x) =>
-              x.articleId === articleId ? { ...x, liked: nextLiked } : x,
-            ),
+            saved: s.saved.map((x) => (x.articleId === articleId ? { ...x, liked: nextLiked } : x)),
           };
         }),
       saveToCollections: (articleId, collectionIds) => {
@@ -285,17 +302,13 @@ export const useDose = create<DoseState>()(
       unsave: (articleId) =>
         set((s) => ({
           saved: s.saved
-            .map((x) =>
-              x.articleId === articleId ? { ...x, collectionIds: [] } : x,
-            )
+            .map((x) => (x.articleId === articleId ? { ...x, collectionIds: [] } : x))
             .filter((x) => x.liked || x.collectionIds.length > 0),
         })),
       addCollection: (name) => {
         const trimmed = name.trim();
         if (!trimmed) return "";
-        const dup = get().collections.find(
-          (c) => c.name.toLowerCase() === trimmed.toLowerCase(),
-        );
+        const dup = get().collections.find((c) => c.name.toLowerCase() === trimmed.toLowerCase());
         if (dup) return dup.id;
         const id = uid();
         set((s) => ({
@@ -319,8 +332,7 @@ export const useDose = create<DoseState>()(
         set((s) => ({
           insights: s.insights.map((i) => (i.id === id ? { ...i, text } : i)),
         })),
-      deleteInsight: (id) =>
-        set((s) => ({ insights: s.insights.filter((i) => i.id !== id) })),
+      deleteInsight: (id) => set((s) => ({ insights: s.insights.filter((i) => i.id !== id) })),
       addComment: (articleId, text, rating) =>
         set((s) => {
           const comment: PublicComment = {
@@ -361,6 +373,7 @@ export const useDose = create<DoseState>()(
           openedSources: [],
           lastReminderDate: null,
           onboardingStep: 0,
+          onboardingDraftReady: false,
         }),
     }),
     {
@@ -390,6 +403,8 @@ export const useDose = create<DoseState>()(
           },
           comments: p.comments ?? [],
           ratings: p.ratings ?? {},
+          // Legacy onboarding flags are never upgraded into a fresh draft.
+          onboardingDraftReady: p.onboardingDraftReady === true,
         };
       },
       partialize: (s) => ({
@@ -404,6 +419,7 @@ export const useDose = create<DoseState>()(
         openedSources: s.openedSources,
         lastReminderDate: s.lastReminderDate,
         onboardingStep: s.onboardingStep,
+        onboardingDraftReady: s.onboardingDraftReady,
       }),
     },
   ),
@@ -466,11 +482,7 @@ export function selectTodayReads(logs: DayLog[]): number {
   return selectTodayLog(logs)?.articlesCompleted.length ?? 0;
 }
 
-export function canStartRead(
-  plan: Profile["plan"],
-  logs: DayLog[],
-  alreadyOpen: boolean,
-): boolean {
+export function canStartRead(plan: Profile["plan"], logs: DayLog[], alreadyOpen: boolean): boolean {
   if (isPremium(plan) || alreadyOpen) return true;
   return selectTodayReads(logs) < FREE_READS_PER_DAY;
 }
@@ -479,10 +491,7 @@ export function selectSavedCount(saved: SavedItem[]): number {
   return saved.filter((x) => x.collectionIds.length > 0).length;
 }
 
-export function prioritizeArticleIds(
-  specialty: Specialty,
-  topics: string[],
-): string[] {
+export function prioritizeArticleIds(specialty: Specialty, topics: string[]): string[] {
   const scored = ARTICLES.map((a) => {
     let score = 0;
     if (a.specialty === specialty) score += 5;

@@ -1,8 +1,9 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
+import { AppAccessProvider } from "@/lib/auth/app-access-provider";
+import { AppRouteGate } from "@/lib/auth/app-route-gate";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { PhoneFrame } from "@/components/phone-frame";
-import { UserDataBridge } from "@/components/user-data-bridge";
 import { PwaRegistration } from "@/components/pwa-registration";
 import appCss from "../styles.css?url";
 
@@ -48,10 +49,13 @@ function Root() {
         <PreviewHostBridge />
         <PwaRegistration />
         <AuthProvider>
-          <UserDataBridge />
-          <PhoneFrame>
-            <Outlet />
-          </PhoneFrame>
+          <AppAccessProvider>
+            <PhoneFrame>
+              <AppRouteGate>
+                <Outlet />
+              </AppRouteGate>
+            </PhoneFrame>
+          </AppAccessProvider>
         </AuthProvider>
         <Scripts />
       </body>

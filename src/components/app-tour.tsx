@@ -3,9 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Mascot } from "@/components/mascot";
 import { Button } from "@/components/ui/button";
 import { getTodayEdition } from "@/lib/content";
+import { useAppAccess } from "@/lib/auth/app-access-context";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { useDose } from "@/lib/store";
 
 export function AppTour() {
+  const { user } = useCurrentUserState();
+  const { remoteOnboarding } = useAppAccess();
   const onboarded = useDose((s) => s.profile.onboardingComplete);
   const plansSeen = useDose((s) => s.profile.planScreenSeen);
   const done = useDose((s) => s.profile.tutorialComplete);
@@ -88,7 +92,9 @@ export function AppTour() {
   const [hole, setHole] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const step = steps[index];
-  const active = Boolean(onboarded && plansSeen && !done && step);
+  const active = Boolean(
+    user && remoteOnboarding === "complete" && onboarded && plansSeen && !done && step,
+  );
 
   useEffect(() => {
     if (!active || !step) return;

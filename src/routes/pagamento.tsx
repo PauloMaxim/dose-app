@@ -4,6 +4,9 @@ import { z } from "zod";
 import { Mascot, STETH_LOOK } from "@/components/mascot";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
+import { destinationAfterPlan } from "@/lib/auth/app-access";
+import { useAppAccess } from "@/lib/auth/app-access-context";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { PLANS, planName } from "@/lib/plans";
 import { playSound } from "@/lib/sound";
 import { useDose } from "@/lib/store";
@@ -23,6 +26,8 @@ function PagamentoPage() {
   const { plan } = Route.useSearch();
   const locale = useDose((s) => s.profile.locale);
   const update = useDose((s) => s.updateProfile);
+  const { user } = useCurrentUserState();
+  const { remoteOnboarding } = useAppAccess();
   const navigate = useNavigate();
   const id = (plan ?? "yearly") as Exclude<PlanId, "free">;
   const meta = PLANS.find((p) => p.id === id) ?? PLANS[1];
@@ -93,7 +98,13 @@ function PagamentoPage() {
             className="mt-5 w-full"
             onClick={() => {
               update({ planScreenSeen: true });
-              void navigate({ to: "/", replace: true });
+              void navigate({
+                to: destinationAfterPlan({
+                  hasUser: Boolean(user),
+                  remoteOnboardingComplete: remoteOnboarding === "complete",
+                }),
+                replace: true,
+              });
             }}
           >
             Continuar no Free
