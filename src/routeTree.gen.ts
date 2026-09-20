@@ -15,6 +15,8 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as PagamentoRouteImport } from './routes/pagamento'
 import { Route as PlanosRouteImport } from './routes/planos'
+import { Route as PrivacidadeRouteImport } from './routes/privacidade'
+import { Route as TermosRouteImport } from './routes/termos'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppArtigosRouteImport } from './routes/_app/artigos'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
@@ -22,6 +24,11 @@ import { Route as AppInsightsRouteImport } from './routes/_app/insights'
 import { Route as AppMascoteRouteImport } from './routes/_app/mascote'
 import { Route as AppPerfilRouteImport } from './routes/_app/perfil'
 import { Route as ArtigoIdRouteImport } from './routes/artigo.$id'
+import { Route as AuthConfirmRouteImport } from './routes/auth.confirm'
+import { Route as AuthReadyRouteImport } from './routes/auth.ready'
+import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
+import { Route as AuthSignupRouteImport } from './routes/auth.signup'
+import { Route as AuthVerifyEmailRouteImport } from './routes/auth.verify-email'
 import { Route as EdicaoIdRouteImport } from './routes/edicao.$id'
 import { Route as LerIdRouteImport } from './routes/ler.$id'
 
@@ -52,6 +59,16 @@ const PagamentoRoute = PagamentoRouteImport.update({
 const PlanosRoute = PlanosRouteImport.update({
   id: '/planos',
   path: '/planos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacidadeRoute = PrivacidadeRouteImport.update({
+  id: '/privacidade',
+  path: '/privacidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermosRoute = TermosRouteImport.update({
+  id: '/termos',
+  path: '/termos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -89,6 +106,31 @@ const ArtigoIdRoute = ArtigoIdRouteImport.update({
   path: '/artigo/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthConfirmRoute = AuthConfirmRouteImport.update({
+  id: '/auth/confirm',
+  path: '/auth/confirm',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthReadyRoute = AuthReadyRouteImport.update({
+  id: '/auth/ready',
+  path: '/auth/ready',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthResetPasswordRoute = AuthResetPasswordRouteImport.update({
+  id: '/auth/reset-password',
+  path: '/auth/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSignupRoute = AuthSignupRouteImport.update({
+  id: '/auth/signup',
+  path: '/auth/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthVerifyEmailRoute = AuthVerifyEmailRouteImport.update({
+  id: '/auth/verify-email',
+  path: '/auth/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EdicaoIdRoute = EdicaoIdRouteImport.update({
   id: '/edicao/$id',
   path: '/edicao/$id',
@@ -107,12 +149,19 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/pagamento': typeof PagamentoRoute
   '/planos': typeof PlanosRoute
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/artigos': typeof AppArtigosRoute
   '/dashboard': typeof AppDashboardRoute
   '/insights': typeof AppInsightsRoute
   '/mascote': typeof AppMascoteRoute
   '/perfil': typeof AppPerfilRoute
   '/artigo/$id': typeof ArtigoIdRoute
+  '/auth/confirm': typeof AuthConfirmRoute
+  '/auth/ready': typeof AuthReadyRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/edicao/$id': typeof EdicaoIdRoute
   '/ler/$id': typeof LerIdRoute
 }
@@ -122,12 +171,19 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/pagamento': typeof PagamentoRoute
   '/planos': typeof PlanosRoute
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/artigos': typeof AppArtigosRoute
   '/dashboard': typeof AppDashboardRoute
   '/insights': typeof AppInsightsRoute
   '/mascote': typeof AppMascoteRoute
   '/perfil': typeof AppPerfilRoute
   '/artigo/$id': typeof ArtigoIdRoute
+  '/auth/confirm': typeof AuthConfirmRoute
+  '/auth/ready': typeof AuthReadyRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/edicao/$id': typeof EdicaoIdRoute
   '/ler/$id': typeof LerIdRoute
   '/': typeof AppIndexRoute
@@ -140,12 +196,19 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/pagamento': typeof PagamentoRoute
   '/planos': typeof PlanosRoute
+  '/privacidade': typeof PrivacidadeRoute
+  '/termos': typeof TermosRoute
   '/_app/artigos': typeof AppArtigosRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/insights': typeof AppInsightsRoute
   '/_app/mascote': typeof AppMascoteRoute
   '/_app/perfil': typeof AppPerfilRoute
   '/artigo/$id': typeof ArtigoIdRoute
+  '/auth/confirm': typeof AuthConfirmRoute
+  '/auth/ready': typeof AuthReadyRoute
+  '/auth/reset-password': typeof AuthResetPasswordRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/edicao/$id': typeof EdicaoIdRoute
   '/ler/$id': typeof LerIdRoute
   '/_app/': typeof AppIndexRoute
@@ -159,12 +222,19 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pagamento'
     | '/planos'
+    | '/privacidade'
+    | '/termos'
     | '/artigos'
     | '/dashboard'
     | '/insights'
     | '/mascote'
     | '/perfil'
     | '/artigo/$id'
+    | '/auth/confirm'
+    | '/auth/ready'
+    | '/auth/reset-password'
+    | '/auth/signup'
+    | '/auth/verify-email'
     | '/edicao/$id'
     | '/ler/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -174,12 +244,19 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pagamento'
     | '/planos'
+    | '/privacidade'
+    | '/termos'
     | '/artigos'
     | '/dashboard'
     | '/insights'
     | '/mascote'
     | '/perfil'
     | '/artigo/$id'
+    | '/auth/confirm'
+    | '/auth/ready'
+    | '/auth/reset-password'
+    | '/auth/signup'
+    | '/auth/verify-email'
     | '/edicao/$id'
     | '/ler/$id'
     | '/'
@@ -191,12 +268,19 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/pagamento'
     | '/planos'
+    | '/privacidade'
+    | '/termos'
     | '/_app/artigos'
     | '/_app/dashboard'
     | '/_app/insights'
     | '/_app/mascote'
     | '/_app/perfil'
     | '/artigo/$id'
+    | '/auth/confirm'
+    | '/auth/ready'
+    | '/auth/reset-password'
+    | '/auth/signup'
+    | '/auth/verify-email'
     | '/edicao/$id'
     | '/ler/$id'
     | '/_app/'
@@ -209,7 +293,14 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   PagamentoRoute: typeof PagamentoRoute
   PlanosRoute: typeof PlanosRoute
+  PrivacidadeRoute: typeof PrivacidadeRoute
+  TermosRoute: typeof TermosRoute
   ArtigoIdRoute: typeof ArtigoIdRoute
+  AuthConfirmRoute: typeof AuthConfirmRoute
+  AuthReadyRoute: typeof AuthReadyRoute
+  AuthResetPasswordRoute: typeof AuthResetPasswordRoute
+  AuthSignupRoute: typeof AuthSignupRoute
+  AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
   EdicaoIdRoute: typeof EdicaoIdRoute
   LerIdRoute: typeof LerIdRoute
 }
@@ -256,6 +347,20 @@ declare module '@tanstack/react-router' {
       path: '/planos'
       fullPath: '/planos'
       preLoaderRoute: typeof PlanosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacidade': {
+      id: '/privacidade'
+      path: '/privacidade'
+      fullPath: '/privacidade'
+      preLoaderRoute: typeof PrivacidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/termos': {
+      id: '/termos'
+      path: '/termos'
+      fullPath: '/termos'
+      preLoaderRoute: typeof TermosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -307,6 +412,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArtigoIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/confirm': {
+      id: '/auth/confirm'
+      path: '/auth/confirm'
+      fullPath: '/auth/confirm'
+      preLoaderRoute: typeof AuthConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/ready': {
+      id: '/auth/ready'
+      path: '/auth/ready'
+      fullPath: '/auth/ready'
+      preLoaderRoute: typeof AuthReadyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/reset-password': {
+      id: '/auth/reset-password'
+      path: '/auth/reset-password'
+      fullPath: '/auth/reset-password'
+      preLoaderRoute: typeof AuthResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/signup': {
+      id: '/auth/signup'
+      path: '/auth/signup'
+      fullPath: '/auth/signup'
+      preLoaderRoute: typeof AuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/verify-email': {
+      id: '/auth/verify-email'
+      path: '/auth/verify-email'
+      fullPath: '/auth/verify-email'
+      preLoaderRoute: typeof AuthVerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/edicao/$id': {
       id: '/edicao/$id'
       path: '/edicao/$id'
@@ -351,7 +491,14 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   PagamentoRoute: PagamentoRoute,
   PlanosRoute: PlanosRoute,
+  PrivacidadeRoute: PrivacidadeRoute,
+  TermosRoute: TermosRoute,
   ArtigoIdRoute: ArtigoIdRoute,
+  AuthConfirmRoute: AuthConfirmRoute,
+  AuthReadyRoute: AuthReadyRoute,
+  AuthResetPasswordRoute: AuthResetPasswordRoute,
+  AuthSignupRoute: AuthSignupRoute,
+  AuthVerifyEmailRoute: AuthVerifyEmailRoute,
   EdicaoIdRoute: EdicaoIdRoute,
   LerIdRoute: LerIdRoute,
 }

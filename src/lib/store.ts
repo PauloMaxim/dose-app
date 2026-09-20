@@ -71,7 +71,10 @@ interface DoseState {
   onboardingDraftReady: boolean;
   setHydrated: () => void;
   saveOnboardingDraft: (partial: Partial<Profile>) => void;
-  applyRemoteProfile: (partial: Pick<Profile, "name" | "locale" | "onboardingComplete">) => void;
+  applyRemoteProfile: (
+    partial: Pick<Profile, "name" | "locale" | "onboardingComplete"> &
+      Partial<Pick<Profile, "specialty" | "topics">>,
+  ) => void;
   clearPrivateSessionCache: () => void;
   updateProfile: (partial: Partial<Profile>) => void;
   setSpecialty: (s: Specialty) => void;
@@ -159,7 +162,19 @@ export const useDose = create<DoseState>()(
           onboardingDraftReady: partial.onboardingComplete ? false : s.onboardingDraftReady,
         })),
       clearPrivateSessionCache: () =>
-        set({
+        set((state) => ({
+          // Preserve a genuine anonymous draft until its first reconciliation.
+          // Otherwise remove every identity-bound profile projection immediately.
+          profile: state.onboardingDraftReady
+            ? state.profile
+            : {
+                ...state.profile,
+                name: "Colega",
+                username: "",
+                specialty: DEFAULT_PROFILE.specialty,
+                topics: [],
+                onboardingComplete: false,
+              },
           progress: {},
           logs: [],
           insights: [],
@@ -169,7 +184,7 @@ export const useDose = create<DoseState>()(
           ratings: {},
           openedSources: [],
           lastReminderDate: null,
-        }),
+        })),
       updateProfile: (partial) =>
         // Local callers may update presentation preferences, never billing authority.
         set((s) => ({ profile: { ...s.profile, ...partial, plan: s.profile.plan } })),

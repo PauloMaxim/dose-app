@@ -21,6 +21,13 @@ export function resolveAppAccessState(input: {
   return "profile_loading";
 }
 
+export function privateCacheMustReset(
+  previousOwner: string | null,
+  nextOwner: string | null,
+): boolean {
+  return previousOwner !== nextOwner;
+}
+
 const PROTECTED_EXACT_PATHS = new Set([
   "/",
   "/artigos",
