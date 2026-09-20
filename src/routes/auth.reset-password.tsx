@@ -10,11 +10,19 @@ import {
 } from "@/lib/auth/auth-flow";
 import { requestPasswordReset, updatePassword } from "@/lib/auth/client";
 import { AuthContext } from "@/lib/auth/context";
-export const Route = createFileRoute("/auth/reset-password")({ component: ResetPassword });
-function ResetPassword() {
+export const Route = createFileRoute("/auth/reset-password")({
+  validateSearch: (search: Record<string, unknown>): { request?: 1 } => ({
+    request: search.request === 1 || search.request === "1" ? 1 : undefined,
+  }),
+  component: ResetPasswordRoute,
+});
+function ResetPasswordRoute() {
+  const { request } = Route.useSearch();
+  return <ResetPassword request={request === 1} />;
+}
+
+export function ResetPassword({ request }: { request: boolean }) {
   const { session, recoveryUserId, consumeRecovery, isPending } = useContext(AuthContext);
-  const request =
-    typeof window !== "undefined" && new URLSearchParams(location.search).get("request") === "1";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -70,7 +78,7 @@ function ResetPassword() {
           </p>
           <Link
             to="/auth/reset-password"
-            search={{ request: "1" } as never}
+            search={{ request: 1 }}
             className="flex min-h-11 items-center justify-center rounded-xl bg-card"
           >
             Solicitar novo link
@@ -131,7 +139,7 @@ function ResetPassword() {
               {message}
             </p>
           )}
-          <Button size="lg" className="w-full" disabled={busy}>
+          <Button type="submit" size="lg" className="w-full" disabled={busy}>
             {busy ? "Aguarde…" : request ? "Enviar instruções" : "Atualizar senha"}
           </Button>
         </form>
