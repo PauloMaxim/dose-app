@@ -1,4 +1,4 @@
-export type AuthErrorLike = { message: string } | null;
+export type AuthErrorLike = { message: string; status?: number; code?: string } | null;
 export interface AuthActionPort {
   signUp(input: {
     email: string;

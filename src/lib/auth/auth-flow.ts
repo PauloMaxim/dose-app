@@ -1,5 +1,9 @@
 export const PASSWORD_MIN_LENGTH = 8;
 
+export function isAcceptableEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export function safeReturnTo(value: string | null | undefined, fallback = "/"): string {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\"))
     return fallback;
@@ -59,14 +63,21 @@ export function friendlyAuthError(
   error: unknown,
   fallback = "Não foi possível concluir agora. Tente novamente.",
 ): string {
+  const details =
+    typeof error === "object" && error !== null
+      ? (error as { status?: unknown; code?: unknown })
+      : null;
+  const code = typeof details?.code === "string" ? details.code.toLowerCase() : "";
   const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (details?.status === 429 || code.includes("rate_limit") || code === "too_many_requests")
+    return "Muitas tentativas em pouco tempo. Aguarde um momento antes de tentar novamente.";
   if (message.includes("invalid login") || message.includes("invalid credentials"))
     return "E-mail ou senha não conferem.";
   if (message.includes("email not confirmed")) return "Confirme seu e-mail antes de entrar.";
   if (message.includes("password") && (message.includes("weak") || message.includes("short")))
     return `Use uma senha com pelo menos ${PASSWORD_MIN_LENGTH} caracteres.`;
   if (message.includes("rate") || message.includes("too many"))
-    return "Muitas tentativas em pouco tempo. Aguarde alguns minutos.";
+    return "Muitas tentativas em pouco tempo. Aguarde um momento antes de tentar novamente.";
   if (message.includes("expired")) return "Este link expirou. Solicite um novo.";
   if (message.includes("invalid") && (message.includes("token") || message.includes("link")))
     return "Este link não é válido ou já foi utilizado.";
