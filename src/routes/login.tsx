@@ -9,7 +9,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
-function Login() {
+export function Login() {
   const { user, isPending } = useCurrentUserState();
   const { remoteOnboarding } = useAppAccess();
   const navigate = useNavigate();
@@ -83,14 +83,14 @@ function Login() {
             {error}
           </p>
         )}
-        <Button size="lg" className="w-full" disabled={busy}>
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>
           {busy ? "Entrando…" : "Entrar"}
         </Button>
       </form>
       <div className="mt-5 flex flex-col items-center gap-2 text-sm">
         <Link
           to="/auth/reset-password"
-          search={{ request: "1" } as never}
+          search={{ request: 1 }}
           className="min-h-11 py-3 text-muted"
         >
           Esqueci minha senha

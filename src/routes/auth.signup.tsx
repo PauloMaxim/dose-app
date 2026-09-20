@@ -8,7 +8,7 @@ import { useDose } from "@/lib/store";
 import { acceptCurrentLegalDocuments } from "@/server/domains/account";
 
 export const Route = createFileRoute("/auth/signup")({ component: Signup });
-function Signup() {
+export function Signup() {
   const navigate = useNavigate();
   const profile = useDose((s) => s.profile);
   const draft = useDose((s) => s.onboardingDraftReady);
@@ -110,7 +110,7 @@ function Signup() {
             {error}
           </p>
         )}
-        <Button size="lg" className="w-full" disabled={busy}>
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>
           {busy ? "Criando…" : "Criar minha conta"}
         </Button>
       </form>
