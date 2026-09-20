@@ -19,6 +19,7 @@
     "test": "node --test scripts/*.test.mjs && tsx --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/auth/supabase-auth.test.ts src/server/scientific/scientific.test.ts",
     "test:scientific": "tsx --test src/server/scientific/scientific.test.ts src/server/scientific/feed.test.ts src/server/scientific/catalog.test.ts src/server/scientific/topic-rules.test.ts src/server/scientific/topic-rules.v1.test.ts src/server/scientific/topic-reclassification-dry-run.test.ts src/server/scientific/topic-backfill.test.ts src/server/scientific/scientific-read-api.test.ts src/server/scientific/pilot-ingestion.test.ts",
     "test:summaries": "tsx --test src/server/scientific/summaries/summaries.test.ts",
+    "test:billing": "tsx --test src/server/billing/billing.test.ts",
     "smoke:scientific": "tsx scripts/scientific-smoke.ts",
     "test:foundation": "node --test scripts/foundation-security.test.mjs scripts/rls-runtime.test.mjs",
     "lint": "eslint .",
