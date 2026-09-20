@@ -12,6 +12,7 @@ import {
 export interface OpenAIResponsesTransport {
   create(
     request: Record<string, unknown>,
+    options?: { signal?: AbortSignal },
   ): Promise<{
     output_text?: string;
     usage?: {
@@ -33,20 +34,27 @@ export class OpenAIResponsesProvider implements ScientificSummaryProvider {
     config: ProviderConfig,
   ): Promise<ProviderResult> {
     try {
-      const response = await this.transport.create({
-        model: config.model,
-        instructions: SUMMARY_SYSTEM_PROMPT,
-        input: JSON.stringify(input),
-        max_output_tokens: config.maxOutputTokens,
-        text: {
-          format: {
-            type: "json_schema",
-            name: "scientific_summary",
-            strict: true,
-            schema: scientificSummaryJsonSchema,
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+      const response = await this.transport
+        .create(
+          {
+            model: config.model,
+            instructions: SUMMARY_SYSTEM_PROMPT,
+            input: JSON.stringify(input),
+            max_output_tokens: config.maxOutputTokens,
+            text: {
+              format: {
+                type: "json_schema",
+                name: "scientific_summary",
+                strict: true,
+                schema: scientificSummaryJsonSchema,
+              },
+            },
           },
-        },
-      });
+          { signal: controller.signal },
+        )
+        .finally(() => clearTimeout(timeout));
       if (!response.output_text)
         throw new SummaryProviderError(
           "invalid_output",
@@ -70,8 +78,12 @@ export class OpenAIResponsesProvider implements ScientificSummaryProvider {
       return { summary, usage, metadata: { responseId: response.id ?? null } };
     } catch (error) {
       if (error instanceof SummaryProviderError) throw error;
+      if ((error as { name?: string }).name === "AbortError")
+        throw new SummaryProviderError("timeout", "OpenAI request timed out", true);
       const status = (error as { status?: number }).status;
       if (status === 429) throw new SummaryProviderError("rate_limit", "OpenAI rate limit", true);
+      if (status && status >= 400 && status < 500)
+        throw new SummaryProviderError("permanent", "OpenAI rejected the request", false);
       throw new SummaryProviderError("transient", "OpenAI transport failure", true);
     }
   }

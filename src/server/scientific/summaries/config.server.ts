@@ -7,6 +7,7 @@ export interface SummaryRuntimeConfig {
   maxInputCharacters: number;
   maxOutputTokens: number;
   maxAttempts: number;
+  timeoutMs: number;
 }
 export function loadSummaryConfig(env: NodeJS.ProcessEnv = process.env): SummaryRuntimeConfig {
   return {
@@ -16,5 +17,6 @@ export function loadSummaryConfig(env: NodeJS.ProcessEnv = process.env): Summary
     maxInputCharacters: Number(env.AI_SUMMARY_MAX_INPUT_CHARS ?? 30_000),
     maxOutputTokens: Number(env.AI_SUMMARY_MAX_OUTPUT_TOKENS ?? 2_000),
     maxAttempts: Number(env.AI_SUMMARY_MAX_ATTEMPTS ?? 3),
+    timeoutMs: Number(env.AI_SUMMARY_TIMEOUT_MS ?? 20_000),
   };
 }

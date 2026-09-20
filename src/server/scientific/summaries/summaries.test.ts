@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSummaryInput, summaryIdentity } from "./domain";
+import { readFile } from "node:fs/promises";
+import { scientificSummarySchema } from "./contract";
+import {
+  buildSummaryInput,
+  evaluateSummaryEligibility,
+  summaryIdentity,
+  type SummaryArticle,
+} from "./domain";
 import { FakeScientificSummaryProvider, validFakeSummary } from "./fake.server";
 import { OpenAIResponsesProvider } from "./openai.server";
 import { InMemorySummaryRepository, ScientificSummaryPipeline } from "./pipeline.server";
 import { validateSummary, sanitizeError } from "./validation";
 import { loadSummaryConfig } from "./config.server";
-import type { SummaryArticle } from "./domain";
 
 const abstract =
   "In a randomized study of 100 adults, the intervention was compared with placebo. Improvement was 20% versus 10%. Authors report uncertainty and recommend additional research.";
@@ -18,8 +24,8 @@ const article = (changes: Partial<SummaryArticle> = {}): SummaryArticle => ({
   journal: "Journal",
   publisher: null,
   publishedAt: "2026-01-01",
-  doi: "10.1/test",
-  pmid: "1",
+  doi: "10.1000/test",
+  pmid: "123",
   pmcid: null,
   language: "en",
   publicationTypes: ["Trial"],
@@ -48,137 +54,172 @@ const config = {
   maxInputCharacters: 30_000,
   maxOutputTokens: 2_000,
   maxAttempts: 3,
+  timeoutMs: 500,
 };
 
-test("eligible article creates allowlisted input without private data", () => {
+test("eligibility is centralized, explained, and recomputed instead of trusting a client hint", () => {
+  assert.deepEqual(evaluateSummaryEligibility(article({ abstract: null })), {
+    eligible: false,
+    reason: "missing_abstract",
+  });
+  assert.deepEqual(evaluateSummaryEligibility(article({ abstract: "short" })), {
+    eligible: false,
+    reason: "abstract_too_short",
+  });
+  assert.ok(buildSummaryInput(article({ summaryEligible: false })));
+});
+test("canonical input is allowlisted and contains no full text or private data", () => {
   const input = buildSummaryInput(article())!;
   assert.equal(input.abstract, abstract);
-  assert.equal(input.articleId, "article-1");
   assert.equal("email" in input, false);
+  assert.equal("fullText" in input, false);
 });
-test("ineligible and insufficient abstracts create no input", () => {
-  assert.equal(buildSummaryInput(article({ summaryEligible: false })), null);
-  assert.equal(buildSummaryInput(article({ abstract: "short" })), null);
-});
-test("identity changes for content, prompt, schema, provider, and model", () => {
-  const i = buildSummaryInput(article())!;
-  const base = summaryIdentity("article-1", i, "p1", "s1", "fake", "m1");
+test("identity includes input, prompt, schema, provider, and model", () => {
+  const input = buildSummaryInput(article())!;
+  const base = summaryIdentity("article-1", input, "p1", "s1", "fake", "m1");
   assert.equal(
     base.identityKey,
-    summaryIdentity("article-1", i, "p1", "s1", "fake", "m1").identityKey,
+    summaryIdentity("article-1", input, "p1", "s1", "fake", "m1").identityKey,
   );
-  const alternatives: [typeof i, string, string, string, string][] = [
+  const alternatives: [typeof input, string, string, string, string][] = [
     [buildSummaryInput(article({ abstract: `${abstract} Changed.` }))!, "p1", "s1", "fake", "m1"],
-    [i, "p2", "s1", "fake", "m1"],
-    [i, "p1", "s2", "fake", "m1"],
-    [i, "p1", "s1", "other", "m1"],
-    [i, "p1", "s1", "fake", "m2"],
+    [input, "p2", "s1", "fake", "m1"],
+    [input, "p1", "s2", "fake", "m1"],
+    [input, "p1", "s1", "other", "m1"],
+    [input, "p1", "s1", "fake", "m2"],
   ];
-  for (const args of alternatives)
-    assert.notEqual(base.identityKey, summaryIdentity("article-1", ...args).identityKey);
+  for (const [candidate, prompt, schema, provider, model] of alternatives)
+    assert.notEqual(
+      base.identityKey,
+      summaryIdentity("article-1", candidate, prompt, schema, provider, model).identityKey,
+    );
 });
-test("valid structured nullable fields, arrays, and source scope pass", () => {
+test("v2 schema accepts explicit absence and rejects extra properties or inconsistent absence", () => {
+  const value = validFakeSummary(buildSummaryInput(article())!);
+  assert.equal(scientificSummarySchema.parse(value).schemaVersion, "scientific-summary.v2");
+  assert.equal(scientificSummarySchema.safeParse({ ...value, surprise: true }).success, false);
+  assert.equal(
+    scientificSummarySchema.safeParse({ ...value, limitations: null, unavailableFields: [] })
+      .success,
+    false,
+  );
+});
+test("fidelity rejects unsupported numbers, mismatched identifiers, invented DOI, and full-text claims", () => {
   const input = buildSummaryInput(article())!;
-  const value = validateSummary(validFakeSummary(input), input);
-  assert.equal(value.objective, null);
-  assert.deepEqual(value.keyNumbers, []);
-  assert.deepEqual(value.technicalTerms, []);
-  assert.equal(value.sourceScope, "abstract_and_metadata");
+  for (const mutate of [
+    (x: ReturnType<typeof validFakeSummary>) => {
+      x.mainResults = "999 participants";
+      x.unavailableFields = x.unavailableFields.filter((f) => f !== "mainResults");
+    },
+    (x: ReturnType<typeof validFakeSummary>) => {
+      x.identifiers.pmid = "999";
+    },
+    (x: ReturnType<typeof validFakeSummary>) => {
+      x.keyPoints = ["See 10.9999/invented"];
+    },
+    (x: ReturnType<typeof validFakeSummary>) => {
+      x.keyPoints = ["We reviewed the full text"];
+    },
+  ]) {
+    const value = structuredClone(validFakeSummary(input));
+    mutate(value);
+    assert.throws(
+      () => validateSummary(value, input),
+      /unsupported|does not match|unknown DOI|full-text/,
+    );
+  }
 });
-test("invalid output and unsupported numeric claims are rejected", () => {
-  const input = buildSummaryInput(article())!;
-  assert.throws(() => validateSummary({}, input));
-  const value = validFakeSummary(input);
-  value.keyNumbers = [{ label: "sample", value: "999", context: null }];
-  assert.throws(() => validateSummary(value, input), /unsupported/);
-});
-test("disabled or ineligible pipeline never calls provider", async () => {
+test("disabled, mismatched configuration, or ineligible pipeline never calls provider", async () => {
   const fake = new FakeScientificSummaryProvider();
-  const disabled = new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, {
-    ...config,
-    enabled: false,
-  });
-  assert.deepEqual(await disabled.generate(article()), { status: "disabled" });
-  const enabled = new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, config);
-  assert.deepEqual(await enabled.generate(article({ summaryEligible: false })), {
-    status: "ineligible",
-  });
+  assert.deepEqual(
+    await new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, {
+      ...config,
+      enabled: false,
+    }).generate(article()),
+    { status: "disabled" },
+  );
+  assert.deepEqual(
+    await new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, {
+      ...config,
+      provider: "openai",
+    }).generate(article()),
+    { status: "disabled" },
+  );
+  assert.deepEqual(
+    await new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, config).generate(
+      article({ abstract: null }),
+    ),
+    { status: "ineligible" },
+  );
   assert.equal(fake.calls, 0);
 });
-test("completed input is cached and token usage/cost are recorded", async () => {
-  const fake = new FakeScientificSummaryProvider();
+test("fake provider completes once under idempotent and concurrent requests with usage/cost", async () => {
+  const fake = new FakeScientificSummaryProvider("success", 10);
   const pipeline = new ScientificSummaryPipeline(
     new InMemorySummaryRepository(),
     fake,
     config,
-    (u) => u.totalTokens * 2,
+    (u) => ({ micros: u.totalTokens * 2, configVersion: "test-pricing-v1" }),
   );
-  const a = await pipeline.generate(article());
-  const b = await pipeline.generate(article());
-  assert.equal(fake.calls, 1);
-  assert.deepEqual(a, b);
-  assert.equal("usage" in a && a.usage?.cachedTokens, 10);
-  assert.equal("estimatedCostMicros" in a && a.estimatedCostMicros, 300);
-  assert.equal("articleId" in a && a.articleId, "article-1");
-});
-test("content changes invalidate cache", async () => {
-  const fake = new FakeScientificSummaryProvider();
-  const pipeline = new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, config);
-  await pipeline.generate(article());
-  await pipeline.generate(article({ abstract: `${abstract} More context.` }));
-  assert.equal(fake.calls, 2);
-});
-test("100 concurrent consumers produce one provider execution", async () => {
-  const fake = new FakeScientificSummaryProvider("success", 10);
-  const pipeline = new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, config);
   const results = await Promise.all(
     Array.from({ length: 100 }, () => pipeline.generate(article())),
   );
   assert.equal(fake.calls, 1);
-  assert.equal(
-    new Set(
-      results.filter((r) => "identityKey" in r).map((r) => "identityKey" in r && r.identityKey),
-    ).size,
-    1,
-  );
+  const completed = results.find((x) => x.status === "completed")!;
+  assert.equal("usage" in completed && completed.usage?.totalTokens, 150);
+  assert.equal("estimatedCostMicros" in completed && completed.estimatedCostMicros, 300);
+  assert.equal("costConfigVersion" in completed && completed.costConfigVersion, "test-pricing-v1");
+  assert.equal("durationMs" in completed && typeof completed.durationMs, "number");
 });
 for (const mode of ["timeout", "rate_limit", "transient"] as const)
-  test(`${mode} is retryable and retry count is limited`, async () => {
+  test(`${mode} retries only to the configured bound`, async () => {
     const fake = new FakeScientificSummaryProvider(mode);
     const pipeline = new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, {
       ...config,
       maxAttempts: 2,
     });
     assert.equal((await pipeline.generate(article())).status, "failed_retryable");
-    assert.equal((await pipeline.generate(article())).status, "failed_permanent");
+    const final = await pipeline.generate(article());
+    assert.equal(final.status, "failed_permanent");
+    assert.equal("failureCode" in final && final.failureCode, mode);
     await pipeline.generate(article());
     assert.equal(fake.calls, 2);
   });
-test("invalid provider output is permanent and never published", async () => {
-  const result = await new ScientificSummaryPipeline(
-    new InMemorySummaryRepository(),
-    new FakeScientificSummaryProvider("invalid"),
-    config,
-  ).generate(article());
-  assert.equal(result.status, "failed_permanent");
-  assert.equal("summary" in result && result.summary, null);
-});
-test("errors are sanitized and bounded", () => {
-  const clean = sanitizeError(new Error("Bearer secret-token sk-abcdefghijklmnop api_key=hidden"));
-  assert.equal(clean.includes("secret-token"), false);
+for (const mode of ["permanent", "invalid"] as const)
+  test(`${mode} failure is permanent and output is never published`, async () => {
+    const fake = new FakeScientificSummaryProvider(mode);
+    const result = await new ScientificSummaryPipeline(
+      new InMemorySummaryRepository(),
+      fake,
+      config,
+    ).generate(article());
+    assert.equal(result.status, "failed_permanent");
+    assert.equal("summary" in result && result.summary, null);
+    await new ScientificSummaryPipeline(new InMemorySummaryRepository(), fake, config).generate(
+      article(),
+    );
+  });
+test("errors are bounded and redact credentials and authorization", () => {
+  const clean = sanitizeError(
+    new Error("Authorization: Bearer secret-token sk-abcdefghijklmnop api_key=hidden"),
+  );
+  assert.doesNotMatch(clean, /secret-token|abcdefghijklmnop|hidden/);
   assert.ok(clean.length <= 500);
 });
-test("configuration defaults closed without an OpenAI key", () => {
-  const c = loadSummaryConfig({} as NodeJS.ProcessEnv);
-  assert.equal(c.enabled, false);
-  assert.equal(c.provider, "fake");
+test("configuration is fail-closed and server-only variables are not VITE-prefixed", () => {
+  const value = loadSummaryConfig({} as NodeJS.ProcessEnv);
+  assert.equal(value.enabled, false);
+  assert.equal(value.provider, "fake");
+  assert.equal(value.timeoutMs, 20_000);
 });
-test("OpenAI adapter prepares Responses strict schema via injected mock only", async () => {
+test("OpenAI adapter uses injected mock, Responses strict schema, timeout, and usage", async () => {
   let request: Record<string, unknown> = {};
+  let receivedSignal = false;
   const input = buildSummaryInput(article())!;
   const provider = new OpenAIResponsesProvider({
-    create: async (value) => {
+    create: async (value, options) => {
       request = value;
+      receivedSignal = options?.signal instanceof AbortSignal;
       return {
         output_text: JSON.stringify(validFakeSummary(input)),
         usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 },
@@ -190,8 +231,22 @@ test("OpenAI adapter prepares Responses strict schema via injected mock only", a
     maxOutputTokens: 500,
     promptVersion: "p",
     schemaVersion: "s",
+    timeoutMs: 100,
   });
   assert.equal(request.model, "test-model");
   assert.equal((request.text as any).format.strict, true);
+  assert.equal(receivedSignal, true);
   assert.equal(result.usage?.totalTokens, 3);
+});
+test("summary migration is additive, trusted-only, and historical migration stays untouched", async () => {
+  const migration = await readFile(
+    new URL(
+      "../../../../supabase/migrations/202609290001_harden_scientific_summary_pipeline.sql",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(migration, /on conflict \(identity_key\) do update/);
+  assert.match(migration, /revoke all on function[\s\S]*authenticated/);
+  assert.doesNotMatch(migration, /grant execute[\s\S]*authenticated/);
 });

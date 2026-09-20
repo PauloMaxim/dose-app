@@ -34,6 +34,7 @@ export interface ProviderConfig {
   maxOutputTokens: number;
   promptVersion: string;
   schemaVersion: string;
+  timeoutMs: number;
 }
 export interface ScientificSummaryProvider {
   readonly id: string;
@@ -42,7 +43,14 @@ export interface ScientificSummaryProvider {
 export type ValidProviderResult = Omit<ProviderResult, "summary"> & { summary: ScientificSummary };
 
 export type ProviderErrorCode =
-  "timeout" | "rate_limit" | "transient" | "invalid_output" | "configuration";
+  | "timeout"
+  | "rate_limit"
+  | "transient"
+  | "permanent"
+  | "invalid_output"
+  | "fidelity_validation"
+  | "configuration"
+  | "ineligible";
 export class SummaryProviderError extends Error {
   constructor(
     public readonly code: ProviderErrorCode,
