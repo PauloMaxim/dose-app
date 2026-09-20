@@ -146,10 +146,11 @@ export const useDose = create<DoseState>()(
       completeOnboarding: (partial) =>
         set((s) => ({
           onboardingStep: 0,
-          profile: { ...s.profile, ...partial, onboardingComplete: true },
+          profile: { ...s.profile, ...partial, plan: s.profile.plan, onboardingComplete: true },
         })),
       updateProfile: (partial) =>
-        set((s) => ({ profile: { ...s.profile, ...partial } })),
+        // Local callers may update presentation preferences, never billing authority.
+        set((s) => ({ profile: { ...s.profile, ...partial, plan: s.profile.plan } })),
       setSpecialty: (specialty) =>
         set((s) => ({ profile: { ...s.profile, specialty } })),
       setTitle: (title) => set((s) => ({ profile: { ...s.profile, title } })),
