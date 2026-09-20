@@ -4,6 +4,9 @@ import { useState } from "react";
 import { Mascot, STETH_LOOK } from "@/components/mascot";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
+import { destinationAfterPlan } from "@/lib/auth/app-access";
+import { useAppAccess } from "@/lib/auth/app-access-context";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { PLANS } from "@/lib/plans";
 import { playSound } from "@/lib/sound";
 import { useDose } from "@/lib/store";
@@ -16,25 +19,27 @@ export const Route = createFileRoute("/planos")({
   component: PlanosPage,
 });
 
-const BENEFITS = [
-  "plans.b1",
-  "plans.b2",
-  "plans.b3",
-  "plans.b4",
-  "plans.b5",
-] as const;
+const BENEFITS = ["plans.b1", "plans.b2", "plans.b3", "plans.b4", "plans.b5"] as const;
 
 function PlanosPage() {
   const t = useT();
   const navigate = useNavigate();
   const update = useDose((s) => s.updateProfile);
+  const { user } = useCurrentUserState();
+  const { remoteOnboarding } = useAppAccess();
   const [picked, setPicked] = useState<Exclude<PlanId, "free">>("yearly");
   const [landed, setLanded] = useState(false);
 
   function skip() {
     playSound("tap");
     update({ planScreenSeen: true });
-    void navigate({ to: "/", replace: true });
+    void navigate({
+      to: destinationAfterPlan({
+        hasUser: Boolean(user),
+        remoteOnboardingComplete: remoteOnboarding === "complete",
+      }),
+      replace: true,
+    });
   }
 
   function goPay() {
@@ -119,9 +124,7 @@ function PlanosPage() {
                       </span>
                     )}
                   </p>
-                  {yearly && (
-                    <p className="mt-0.5 text-[11px] text-teal">{t("plans.save")}</p>
-                  )}
+                  {yearly && <p className="mt-0.5 text-[11px] text-teal">{t("plans.save")}</p>}
                 </div>
                 <div className="text-right">
                   {yearly ? (
@@ -146,7 +149,9 @@ function PlanosPage() {
             );
           })}
         </div>
-        <p className="mt-2.5 text-center text-[11px] leading-snug text-subtle">{t("plans.cancel")}</p>
+        <p className="mt-2.5 text-center text-[11px] leading-snug text-subtle">
+          {t("plans.cancel")}
+        </p>
         <Button size="lg" className="mt-2.5 w-full" onClick={goPay}>
           {t("plans.cta")}
         </Button>

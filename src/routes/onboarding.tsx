@@ -5,6 +5,7 @@ import { formatClock, TimePicker } from "@/components/time-picker";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
 import { authEnabled, GROK_PROVIDERS, signIn } from "@/lib/auth/client";
+import { useAppAccess } from "@/lib/auth/app-access-context";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { SPECIALTIES, TOPIC_OPTIONS } from "@/lib/content";
 import type { ScientificCatalog } from "@/lib/scientific-catalog";
@@ -41,14 +42,17 @@ const TIMES: Array<{ label: string; hour: number | null }> = [
 
 function Onboarding() {
   const navigate = useNavigate();
-  const { user } = useCurrentUserState();
+  const { user, isPending: sessionPending } = useCurrentUserState();
+  const userId = user?.id ?? null;
+  const { remoteOnboarding, refreshRemoteProfile } = useAppAccess();
   const hydrated = useDose((s) => s.hydrated);
-  const complete = useDose((s) => s.completeOnboarding);
+  const saveDraft = useDose((s) => s.saveOnboardingDraft);
   const update = useDose((s) => s.updateProfile);
   const setStep = useDose((s) => s.setOnboardingStep);
   const setReminderHour = useDose((s) => s.setReminderHour);
   const profile = useDose((s) => s.profile);
-  const returning = profile.onboardingComplete;
+  const draftReady = useDose((s) => s.onboardingDraftReady);
+  const returning = remoteOnboarding === "complete";
   const rawStep = useDose((s) => s.onboardingStep);
   const step = Math.min(LAST, rawStep);
   const [name, setName] = useState(profile.name === "Marina" ? "" : profile.name);
@@ -90,7 +94,8 @@ function Onboarding() {
   }, [hydrated, step]);
 
   useEffect(() => {
-    if (!hydrated || !user) return;
+    if (!hydrated || !userId) return;
+    if (catalog) return;
     let current = true;
     Promise.all([readScientificCatalog(), readMyInterests()])
       .then(([nextCatalog, interests]) => {
@@ -98,8 +103,15 @@ function Onboarding() {
         if (!nextCatalog.specialties.length) throw new Error("empty catalog");
         setCatalog(nextCatalog);
         const remoteSpecialty = interests.find((x) => x.specialty_id)?.specialty_id ?? "";
-        setSpecialtyId(remoteSpecialty);
-        setTopicIds(interests.flatMap((x) => (x.topic_id ? [x.topic_id] : [])));
+        const draftSpecialty =
+          nextCatalog.specialties.find((x) => x.name === profile.specialty)?.id ?? "";
+        setSpecialtyId(remoteSpecialty || (draftReady ? draftSpecialty : ""));
+        const remoteTopics = interests.flatMap((x) => (x.topic_id ? [x.topic_id] : []));
+        setTopicIds(
+          remoteTopics.length || !draftReady
+            ? remoteTopics
+            : nextCatalog.topics.filter((x) => profile.topics.includes(x.name)).map((x) => x.id),
+        );
         const remoteName = nextCatalog.specialties.find((x) => x.id === remoteSpecialty)?.name;
         if (remoteName && SPECIALTIES.includes(remoteName as Specialty))
           setSpecialty(remoteName as Specialty);
@@ -111,18 +123,44 @@ function Onboarding() {
     return () => {
       current = false;
     };
-  }, [hydrated, user]);
+  }, [catalog, draftReady, hydrated, profile.specialty, profile.topics, userId]);
 
   useEffect(() => {
-    if (!hydrated || !returning || step === 0) return;
-    void navigate({ to: profile.planScreenSeen ? "/" : "/planos", replace: true });
-  }, [hydrated, returning, step, profile.planScreenSeen, navigate]);
+    if (hydrated && returning) void navigate({ to: "/", replace: true });
+  }, [hydrated, navigate, returning]);
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      !userId ||
+      remoteOnboarding !== "incomplete" ||
+      !draftReady ||
+      !profile.planScreenSeen ||
+      !catalog ||
+      !specialtyId ||
+      saving
+    )
+      return;
+    void finishOnboarding(true);
+    // finishOnboarding intentionally runs only once after all authoritative
+    // inputs for a fresh, explicitly completed visitor draft are available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    catalog,
+    draftReady,
+    hydrated,
+    profile.planScreenSeen,
+    remoteOnboarding,
+    saving,
+    specialtyId,
+    userId,
+  ]);
 
   function go(next: number) {
     setStep(Math.max(0, Math.min(LAST, next)));
   }
 
-  async function finishToHome() {
+  async function finishOnboarding(resumingAfterPlan = false) {
     setPermError("");
     if (user) {
       if (!catalog || !specialtyId) {
@@ -140,6 +178,8 @@ function Onboarding() {
             topicIds,
           },
         });
+        const remotelyComplete = await refreshRemoteProfile();
+        if (!remotelyComplete) throw new Error("Não foi possível confirmar seu perfil salvo.");
       } catch (error) {
         setPermError(
           error instanceof Error ? error.message : "Não foi possível salvar seus interesses.",
@@ -148,8 +188,23 @@ function Onboarding() {
         return;
       }
       setSaving(false);
+      update({
+        name: name.trim() || profile.name || "Colega",
+        title,
+        specialty,
+        topics: catalog.topics.filter((x) => topicIds.includes(x.id)).map((x) => x.name),
+        dailyGoalMin: goal,
+        weeklyGoalMin: goal * 6,
+        reminderHour: hour,
+        reminderMinute: hour == null ? 0 : minute,
+        tutorialComplete: false,
+        username: name.trim() ? slugUsername(name.trim()) : profile.username || "dose",
+      });
+      track("onboarding_complete", { dest: resumingAfterPlan ? "home" : "planos" });
+      void navigate({ to: resumingAfterPlan ? "/" : "/planos", replace: true });
+      return;
     }
-    complete({
+    saveDraft({
       name: name.trim() || "Colega",
       title,
       specialty,
@@ -191,14 +246,34 @@ function Onboarding() {
       }
     }
     track("onboarding_continue", { step: LAST, hour: hour ?? -1 });
-    await finishToHome();
+    await finishOnboarding();
   }
 
-  if (!hydrated) {
+  if (!hydrated || sessionPending || (user && remoteOnboarding === "loading")) {
     return (
       <div className="flex h-full items-center justify-center bg-bg" aria-busy="true">
         <p className="text-sm text-muted">Carregando…</p>
       </div>
+    );
+  }
+
+  if (user && draftReady && profile.planScreenSeen && permError) {
+    return (
+      <main className="flex h-full flex-col items-center justify-center bg-bg px-6 text-center">
+        <Mascot mood="waiting" streak={0} size={112} />
+        <h1 className="mt-5 text-[24px] font-semibold">Seu draft continua salvo</h1>
+        <p className="mt-2 max-w-[32ch] text-sm leading-relaxed text-muted" role="alert">
+          {permError}
+        </p>
+        <Button
+          size="lg"
+          className="mt-6 w-full"
+          disabled={saving}
+          onClick={() => void finishOnboarding(true)}
+        >
+          {saving ? "Tentando novamente…" : "Tentar salvar novamente"}
+        </Button>
+      </main>
     );
   }
 
@@ -309,20 +384,20 @@ function Onboarding() {
                 className="relative z-10 w-full"
                 onClick={() => {
                   track("onboarding_continue", { step: 0, returning });
-                  if (returning) {
-                    void navigate({ to: profile.planScreenSeen ? "/" : "/planos" });
+                  if (returning || draftReady) {
+                    void navigate({ to: returning ? "/" : "/planos" });
                     return;
                   }
                   go(1);
                 }}
               >
-                {returning ? "Continuar no Dose" : "Começar"}
+                {returning ? "Continuar no Dose" : draftReady ? "Continuar" : "Começar"}
               </Button>
               <Link
                 to="/login"
                 className="relative z-10 mt-2 flex h-11 items-center justify-center text-sm text-muted"
               >
-                {returning ? "Usar outro email" : "Usar email"}
+                {returning ? "Usar outro email" : "Entrar ou criar conta"}
               </Link>
             </div>
           </Pane>
@@ -708,7 +783,7 @@ function Onboarding() {
                 setHour(null);
                 setMinute(0);
                 setReminderHour(null);
-                void finishToHome();
+                void finishOnboarding();
               }}
             >
               Agora não
