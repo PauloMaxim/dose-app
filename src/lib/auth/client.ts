@@ -30,7 +30,14 @@ export async function signUpWithPassword(
     displayName,
   );
   return {
-    error: error ? new Error(error.message) : null,
+    // Preserve AuthError metadata such as status/code so the UI can distinguish
+    // a real server rate limit from local validation failures.
+    error:
+      error &&
+      Object.assign(new Error(error.message), {
+        status: error.status,
+        code: error.code,
+      }),
     user: data.user as User | null,
     needsConfirmation: Boolean(data.user && !data.session),
   };

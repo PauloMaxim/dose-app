@@ -264,6 +264,136 @@ describe("critical auth forms", () => {
   });
 });
 
+describe("signup validation and password UX", () => {
+  async function fillValidSignup(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByLabelText("E-mail"), "doctor@example.com");
+    await user.type(screen.getByLabelText("Senha"), "DoseTeste#9264");
+    await user.type(screen.getByLabelText("Confirmar senha"), "DoseTeste#9264");
+  }
+
+  it("rejects mismatched passwords locally and submits once after correction", async () => {
+    const user = userEvent.setup();
+    await renderAt("/auth/signup");
+    await user.type(screen.getByLabelText("E-mail"), "doctor@example.com");
+    await user.type(screen.getByLabelText("Senha"), "DoseTeste#9264");
+    await user.type(screen.getByLabelText("Confirmar senha"), "DoseTeste#9265");
+
+    await user.click(screen.getByRole("button", { name: "Criar minha conta" }));
+
+    expect(screen.getByText("As senhas não coincidem.")).toBeTruthy();
+    expect(screen.queryByText(/Muitas tentativas/)).toBeNull();
+    expect(auth.signUpWithPassword).not.toHaveBeenCalled();
+
+    const confirmation = screen.getByLabelText("Confirmar senha");
+    await user.clear(confirmation);
+    await user.type(confirmation, "DoseTeste#9264");
+    expect(screen.queryByText("As senhas não coincidem.")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Criar minha conta" }));
+    expect(auth.signUpWithPassword).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a password below the actual minimum without a request", async () => {
+    const user = userEvent.setup();
+    await renderAt("/auth/signup");
+    await user.type(screen.getByLabelText("E-mail"), "doctor@example.com");
+    await user.type(screen.getByLabelText("Senha"), "short");
+    await user.type(screen.getByLabelText("Confirmar senha"), "short");
+
+    await user.click(screen.getByRole("button", { name: "Criar minha conta" }));
+
+    expect(screen.getByText("Use uma senha com pelo menos 8 caracteres.")).toBeTruthy();
+    expect(auth.signUpWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("blocks rapid double clicks while signup is pending", async () => {
+    let resolveSignup!: (value: { error: Error }) => void;
+    auth.signUpWithPassword.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSignup = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    await renderAt("/auth/signup");
+    await fillValidSignup(user);
+
+    await user.dblClick(screen.getByRole("button", { name: "Criar minha conta" }));
+
+    expect(auth.signUpWithPassword).toHaveBeenCalledOnce();
+    expect((screen.getByRole("button", { name: "Criando…" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    resolveSignup({ error: new Error("recoverable") });
+    await screen.findByRole("alert");
+  });
+
+  it("blocks repeated Enter submissions while signup is pending", async () => {
+    let resolveSignup!: (value: { error: Error }) => void;
+    auth.signUpWithPassword.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSignup = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    await renderAt("/auth/signup");
+    await fillValidSignup(user);
+
+    await user.keyboard("{Enter}{Enter}");
+
+    expect(auth.signUpWithPassword).toHaveBeenCalledOnce();
+    resolveSignup({ error: new Error("recoverable") });
+    await screen.findByRole("alert");
+  });
+
+  it.each([
+    ["Senha", "senha"],
+    ["Confirmar senha", "confirmação de senha"],
+  ])("keeps the visibility control for %s after blur", async (fieldName, controlName) => {
+    const user = userEvent.setup();
+    await renderAt("/auth/signup");
+    const input = screen.getByLabelText(fieldName) as HTMLInputElement;
+    await user.type(input, "DoseTeste#9264");
+    const show = screen.getByRole("button", { name: `Mostrar ${controlName}` });
+
+    await user.click(show);
+    expect(input.type).toBe("text");
+    expect(input.value).toBe("DoseTeste#9264");
+    await user.click(screen.getByLabelText("E-mail"));
+
+    const hide = screen.getByRole("button", { name: `Ocultar ${controlName}` });
+    expect(input.value).toBe("DoseTeste#9264");
+    await user.click(hide);
+    expect(input.type).toBe("password");
+    expect(auth.signUpWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("shows a real rate limit without clearing fields or retrying automatically", async () => {
+    auth.signUpWithPassword.mockResolvedValue({
+      error: Object.assign(new Error("request rejected"), {
+        status: 429,
+        code: "over_email_send_rate_limit",
+      }),
+    });
+    const user = userEvent.setup();
+    await renderAt("/auth/signup");
+    await fillValidSignup(user);
+
+    await user.click(screen.getByRole("button", { name: "Criar minha conta" }));
+
+    expect(
+      await screen.findByText(
+        "Muitas tentativas em pouco tempo. Aguarde um momento antes de tentar novamente.",
+      ),
+    ).toBeTruthy();
+    expect(auth.signUpWithPassword).toHaveBeenCalledOnce();
+    expect((screen.getByLabelText("E-mail") as HTMLInputElement).value).toBe("doctor@example.com");
+    expect((screen.getByLabelText("Senha") as HTMLInputElement).value).toBe("DoseTeste#9264");
+    expect((screen.getByLabelText("Confirmar senha") as HTMLInputElement).value).toBe(
+      "DoseTeste#9264",
+    );
+  });
+});
+
 async function renderGatedAt(path: string, remoteOnboarding: "complete" | "idle" = "complete") {
   const rootRoute = createRootRoute({
     component: () => (
