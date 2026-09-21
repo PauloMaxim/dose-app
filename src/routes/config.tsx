@@ -14,15 +14,24 @@ import {
   Moon,
   Shield,
   Sparkles,
+  Trash2,
   User,
   Volume2,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { AvatarEdit } from "@/components/avatar";
+import { AccountDeletionDialog } from "@/components/account-deletion-dialog";
 import { formatClock, TimePicker } from "@/components/time-picker";
 import { Button } from "@/components/ui/button";
-import { changePassword, reauthenticatePassword, signOut, updateEmail } from "@/lib/auth/client";
+import {
+  changePassword,
+  clearDeletedAccountSession,
+  reauthenticatePassword,
+  signOut,
+  updateEmail,
+} from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { completeAccountDeletion } from "@/lib/account-deletion";
 import { useT } from "@/lib/i18n";
 import { planName } from "@/lib/plans";
 import { playSound } from "@/lib/sound";
@@ -58,8 +67,6 @@ function ConfigPage() {
   const [curPass, setCurPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [newPassConfirm, setNewPassConfirm] = useState("");
-  const [deletePassword, setDeletePassword] = useState("");
-  const [deletePhrase, setDeletePhrase] = useState("");
   const [formMsg, setFormMsg] = useState("");
   const [customGoal, setCustomGoal] = useState(
     GOAL_PRESETS.includes(profile.dailyGoalMin) ? "" : String(profile.dailyGoalMin),
@@ -91,42 +98,29 @@ function ConfigPage() {
     void navigate({ to: "/onboarding" });
   }
 
-  async function wipe() {
+  async function deleteAccount() {
     setLeaving(true);
     setFormMsg("");
-    if (!deletePassword || deletePhrase !== "EXCLUIR") {
-      setFormMsg("Informe sua senha e digite EXCLUIR para confirmar.");
-      setLeaving(false);
-      return;
-    }
-    const verified = await reauthenticatePassword(deletePassword);
-    if (verified.error) {
-      setFormMsg("A senha atual não confere. A conta não foi excluída.");
-      setLeaving(false);
-      return;
-    }
     try {
-      await deleteMyAccount();
+      await completeAccountDeletion({
+        deleteAccount: deleteMyAccount,
+        clearPrivateState: resetDemo,
+        clearPrivateStorage: async () => useDose.persist.clearStorage(),
+        clearAuthAndRedirect: clearDeletedAccountSession,
+      });
     } catch {
-      setFormMsg("Não foi possível excluir sua conta agora. Tente novamente.");
       setLeaving(false);
-      return;
+      throw new Error("account deletion failed");
     }
+  }
+
+  async function clearLocalCache() {
     resetDemo();
     try {
       await useDose.persist.clearStorage();
-    } catch {
-      // Continue to Auth cleanup even if browser storage is unavailable.
-    }
-    resetDemo();
-    try {
-      await signOut("/onboarding");
-    } catch {
-      // Supabase signOut clears deleted-user sessions on 401/403/404. If local
-      // Auth cleanup reports another transient failure, still force the public
-      // navigation with every Dose-owned private projection already cleared.
+    } finally {
       resetDemo();
-      void navigate({ to: "/onboarding" });
+      setFormMsg("Cache local limpo. Sua conta e sessão continuam ativas.");
     }
   }
 
@@ -627,66 +621,45 @@ function ConfigPage() {
           )}
         </div>
 
-        <div className="mt-3">
-          {confirmDel ? (
-            <div className="rounded-2xl border border-danger/40 px-4 py-4">
-              <p className="text-sm text-muted">{t("settings.delete.hint")}</p>
-              <label htmlFor="delete-password" className="mt-3 block text-sm font-medium">
-                Senha atual
-              </label>
-              <input
-                id="delete-password"
-                type="password"
-                autoComplete="current-password"
-                value={deletePassword}
-                onChange={(e) => setDeletePassword(e.target.value)}
-                className="mt-1 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
-              />
-              <label htmlFor="delete-phrase" className="mt-3 block text-sm font-medium">
-                Digite EXCLUIR
-              </label>
-              <input
-                id="delete-phrase"
-                autoComplete="off"
-                value={deletePhrase}
-                onChange={(e) => setDeletePhrase(e.target.value)}
-                className="mt-1 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none"
-              />
-              {formMsg && (
-                <p role="alert" className="mt-2 text-sm text-danger">
-                  {formMsg}
-                </p>
-              )}
-              <Button
-                size="lg"
-                className="mt-3 w-full bg-danger text-on-accent"
-                disabled={leaving}
-                onClick={() => void wipe()}
-              >
-                {t("settings.delete.confirm")}
-              </Button>
-              <button
-                type="button"
-                className="mt-2 h-11 w-full text-sm text-muted"
-                onClick={() => setConfirmDel(false)}
-              >
-                {t("settings.cancel")}
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setConfirmOut(false);
-                setConfirmDel(true);
-              }}
-              className="flex h-14 w-full items-center justify-center rounded-2xl border border-danger/45 text-sm font-semibold text-danger"
-            >
-              {t("settings.delete")}
-            </button>
+        <p className="mb-2 mt-7 px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-subtle">
+          Conta e segurança
+        </p>
+        <div className="rounded-2xl border border-danger/30 bg-card">
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmOut(false);
+              setConfirmDel(true);
+            }}
+            className="flex min-h-14 w-full items-center gap-3 px-4 text-left text-danger"
+          >
+            <Trash2 className="size-5" />
+            <span className="flex-1 text-sm font-semibold">Excluir conta</span>
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+
+        <div className="mt-3 rounded-2xl bg-card px-4 py-3">
+          <button
+            type="button"
+            className="min-h-11 w-full text-sm font-medium text-muted"
+            onClick={() => void clearLocalCache()}
+          >
+            {t("settings.delete")}
+          </button>
+          <p className="text-center text-xs text-subtle">{t("settings.delete.hint")}</p>
+          {formMsg && (
+            <p role="status" className="mt-2 text-center text-xs text-muted">
+              {formMsg}
+            </p>
           )}
         </div>
       </div>
+      <AccountDeletionDialog
+        open={confirmDel}
+        onCancel={() => setConfirmDel(false)}
+        onDelete={deleteAccount}
+      />
     </div>
   );
 }
