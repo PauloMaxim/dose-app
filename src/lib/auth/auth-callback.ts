@@ -14,6 +14,18 @@ export function resolveConfirmedCallbackKind(input: {
   return null;
 }
 
+export function canReconcileFailedConfirmation(input: {
+  requestedKind: AuthCallbackKind;
+  remotelyConfirmed: boolean;
+  hasCallbackProof: boolean;
+}): boolean {
+  // A failed recovery callback must remain failed. For ordinary confirmation,
+  // only a provider event produced on this callback plus a fresh getUser result
+  // can prove that identity confirmation actually completed before a later step
+  // reported an error.
+  return input.requestedKind !== "recovery" && input.remotelyConfirmed && input.hasCallbackProof;
+}
+
 export async function finishConfirmedIdentity(
   kind: AuthCallbackKind,
   acceptLegal: () => Promise<unknown>,

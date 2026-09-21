@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import {
   canResetPassword,
+  classifyRevalidatedUser,
   callbackDestination,
   confirmationRedirectPath,
   friendlyAuthError,
@@ -11,10 +12,15 @@ import {
   RECOVERY_SUCCESS_DESTINATION,
   safeReturnTo,
 } from "./auth-flow.ts";
-import { finishConfirmedIdentity, resolveConfirmedCallbackKind } from "./auth-callback.ts";
+import {
+  canReconcileFailedConfirmation,
+  finishConfirmedIdentity,
+  resolveConfirmedCallbackKind,
+} from "./auth-callback.ts";
 import { reduceAuthSecurityState } from "./context.ts";
 import { privateCacheMustReset } from "./app-access.ts";
 import type { Session } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import { useDose } from "../store.ts";
 
 describe("Auth V1 security boundaries", () => {
@@ -73,6 +79,22 @@ describe("Auth V1 security boundaries", () => {
     );
     assert.equal(callbackDestination("recovery"), "/auth/reset-password");
   });
+  it("reconciles callback failure only from fresh identity plus callback proof", () => {
+    assert.equal(
+      canReconcileFailedConfirmation({
+        requestedKind: "signup",
+        remotelyConfirmed: true,
+        hasCallbackProof: true,
+      }),
+      true,
+    );
+    for (const unsafe of [
+      { requestedKind: "signup" as const, remotelyConfirmed: true, hasCallbackProof: false },
+      { requestedKind: "signup" as const, remotelyConfirmed: false, hasCallbackProof: true },
+      { requestedKind: "recovery" as const, remotelyConfirmed: true, hasCallbackProof: true },
+    ])
+      assert.equal(canReconcileFailedConfirmation(unsafe), false);
+  });
   it("maps expired, invalid, and already-used links to non-technical errors", () => {
     assert.match(friendlyAuthError(new Error("link expired")), /expirou/);
     assert.match(friendlyAuthError(new Error("invalid token")), /não é válido/);
@@ -94,8 +116,20 @@ describe("Auth V1 security boundaries", () => {
         accepts += 1;
       });
       assert.equal(accepts, 1);
-      assert.deepEqual(result, { status: "ready", destination: "/onboarding" });
+      assert.deepEqual(result, { status: "ready", destination: "/" });
     }
+  });
+  it("uses only a remotely revalidated user as confirmation evidence", () => {
+    assert.deepEqual(classifyRevalidatedUser(null), { status: "signed-out" });
+    assert.deepEqual(
+      classifyRevalidatedUser({ id: "pending", email_confirmed_at: null } as unknown as User),
+      { status: "unconfirmed" },
+    );
+    const confirmed = {
+      id: "confirmed",
+      email_confirmed_at: "2026-09-20T00:00:00Z",
+    } as unknown as User;
+    assert.deepEqual(classifyRevalidatedUser(confirmed), { status: "confirmed", user: confirmed });
   });
   it("reports post-confirmation acceptance failure separately from link failure", async () => {
     const result = await finishConfirmedIdentity("signup", async () => {

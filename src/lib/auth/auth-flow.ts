@@ -1,4 +1,17 @@
+import type { User } from "@supabase/supabase-js";
+
 export const PASSWORD_MIN_LENGTH = 8;
+
+export type EmailConfirmationReconciliation =
+  | { status: "confirmed"; user: User }
+  | { status: "unconfirmed" }
+  | { status: "signed-out" }
+  | { status: "error" };
+
+export function classifyRevalidatedUser(user: User | null): EmailConfirmationReconciliation {
+  if (!user) return { status: "signed-out" };
+  return user.email_confirmed_at ? { status: "confirmed", user } : { status: "unconfirmed" };
+}
 
 export function isAcceptableEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
@@ -38,8 +51,9 @@ export function callbackDestination(
   kind: AuthCallbackKind,
 ): "/auth/reset-password" | "/" | "/onboarding" {
   if (kind === "recovery") return "/auth/reset-password";
-  if (kind === "email-change") return "/";
-  return "/onboarding";
+  // The protected root is the single authority that checks the remote profile
+  // before choosing Home or onboarding.
+  return "/";
 }
 
 export function requiresLegalAcceptance(kind: AuthCallbackKind): boolean {
