@@ -19,6 +19,10 @@ explícita posterior.
 - **HYPOTHESIS TO VALIDATE** — relação causal ou expectativa que exige evidência com usuários/dados.
 - **NOT VERIFIED** — não foi possível demonstrar pelo repositório local.
 
+A hierarquia de certeza deste documento é: **evidência verificada → princípio proposto → hipótese →
+experimento → decisão explicitamente adiada**. Uma ideia persuasiva ou promissora não salta etapas e não
+se torna requisito de arquitetura por estar escrita aqui.
+
 ### Baseline verificado no repositório
 
 | Estado                           | Evidência local e consequência para este Blueprint                                                                                                                                                                                                                                                                                       |
@@ -43,40 +47,78 @@ de um produto científico/monetizado validado.
 
 ## 1. Tese central do produto
 
-**PROPOSED PRODUCT DECISION — problema:** profissionais que desejam acompanhar sua área enfrentam
-fontes fragmentadas, volume variável e o custo mental recorrente de buscar, triar, conferir e organizar.
-O concorrente primário não é apenas outro software: é uma combinação de buscas manuais, newsletters,
-alertas, redes, colegas, leitura ocasional e desistência.
+**PROPOSED PRODUCT DECISION — problema:** o inimigo não é apenas outro software. É o conjunto de volume,
+fragmentação, buscas repetitivas, inbox científico, favoritos dispersos, falta de priorização, “depois eu
+vejo” e sensação de tarefa infinita. Os substitutos incluem PubMed manual, newsletters, alertas, grupos,
+colegas, redes sociais, busca ocasional e não fazer nada. Nenhuma preferência de mercado entre essas
+alternativas foi verificada.
 
 **PROPOSED PRODUCT DECISION — promessa:** o Dose acompanha a literatura que corresponde aos interesses
 declarados, reduz o conjunto, explica por que algo merece atenção e torna explícito o que mudou — sem
-substituir a fonte científica nem prometer completude impossível.
+substituir a fonte nem prometer completude impossível.
 
-“Saiba o que mudou na sua área sem precisar procurar” expressa bem **delegação e proatividade**, mas não
-é tagline aprovada. “Sem precisar procurar” pode soar como cobertura absoluta; uma formulação futura
-deve comunicar escopo, fontes e limitações.
+A mudança de categoria proposta é de ferramenta reativa para serviço contínuo:
 
-**HYPOTHESIS TO VALIDATE:** a unidade de valor não é IA, resumo, dashboard nem acesso ao artigo. É a
-confiança de que um serviço delimitado já trabalhou entre visitas: descobriu, classificou, personalizou,
-priorizou e apresentou mudanças verificáveis. IA pode reduzir o custo de compreensão; não substitui o
-sistema nem a fonte.
+- **Ferramenta:** usuário lembra → abre → procura → filtra → lê.
+- **Dose:** literatura aparece → Dose encontra → classifica → relaciona aos interesses → prioriza →
+  prepara a experiência → usuário chega e encontra o trabalho adiantado.
+
+**HYPOTHESIS TO VALIDATE:** parte importante do valor existe fora da sessão: saber que um serviço
+delimitado estava acompanhando o escopo escolhido enquanto o usuário não estava no aplicativo. O usuário
+não pagaria apenas pelo que acontece diante da tela, mas pelo trabalho recorrente preparado entre visitas.
+“Saiba o que mudou na sua área sem precisar procurar” expressa essa delegação, mas não é tagline aprovada
+e precisa sempre comunicar fontes, escopo e limitações.
 
 O fluxo conceitual é:
 
 > ciência nova → descoberta → classificação → personalização → priorização → apresentação →
 > compreensão → ação do usuário → histórico → nova Dose
 
-Cada seta é uma promessa que precisa de observabilidade e fallback. Se descoberta ou classificação não
-estiver ativa, a interface não deve fingir continuidade.
+Cada seta exige observabilidade e fallback. Se descoberta ou classificação não estiver ativa, a
+interface não deve fingir continuidade.
 
-### Valor funcional e emocional
+### One-Sentence Product Thesis — candidatas, não tagline final
 
-- **Funcional:** menos busca repetitiva; triagem finita; prioridade explicável; caminho curto até a
-  fonte; continuidade entre sessões.
-- **Emocional:** alívio por reduzir trabalho aberto, controle sobre escopo e frequência, confiança por
-  ver proveniência, curiosidade concentrada e progresso real sem transformar leitura em competição.
-- **Identidade:** apoiar a prática de alguém que se mantém atualizado com discernimento — sem certificar
-  competência, superioridade ou qualidade do cuidado.
+1. **Serviço e operação:** “Um serviço de atualização científica personalizado que encontra, prioriza e
+   organiza o que mudou nos temas que você acompanha.” É a opção mais concreta sobre o trabalho feito.
+2. **Alívio:** “Uma forma de acompanhar sua área sem transformar atualização científica em outra tarefa
+   infinita.” Lidera com carga mental, mas explica menos o mecanismo.
+3. **Delegação:** “O Dose acompanha seu escopo científico e prepara o que merece atenção antes de você
+   precisar procurar.” Comunica trabalho entre visitas, mas exige qualificação forte de cobertura.
+4. **Resultado:** “Literatura nova, reduzida a uma Dose verificável do que merece sua atenção agora.”
+   Reforça finitude e confiança, mas pode soar editorialmente mais assertiva.
+
+A formulação futura deve equilibrar desejo e precisão; nenhuma candidata foi validada ou aprovada.
+
+### Arquitetura emocional e luxo funcional
+
+A progressão proposta é **sobrecarga → redução → orientação → controle → confiança → continuidade →
+orgulho profissional sereno**. O Dose pode converter uma tarefa infinita em curiosidade administrável:
+alívio porque o universo foi reduzido; controle porque escopo e fim são claros; confiança porque tudo é
+verificável; continuidade porque o contexto permanece; identidade porque o usuário pode pensar “sou um
+profissional que acompanha minha área de maneira criteriosa”.
+
+“Luxo”, como lente de produto e não promessa comercial, significa **esforço evitado**: antecipar uma
+necessidade, preparar antes da chegada, selecionar com critério, organizar e devolver tempo. O equivalente
+a concierge seria: “acompanhei isto dentro do escopo que você escolheu; aqui está o que merece atenção”.
+Não é decoração ostensiva, status público ou magia opaca. A sensação de cuidado depende de o serviço ser
+confiável, seletivo e honesto sobre o que não cobriu.
+
+Status e vaidade profissional são forças humanas legítimas para análise, mas não autorizam ranking entre
+médicos, badges de superioridade, comparação do tipo “à frente de 87%”, culpa ou ameaça.
+
+### Utility → Desirability → Habit → Willingness to Pay
+
+- **UTILITY:** “isso me ajuda” — um item relevante ou uma boa síntese pode resolver uma tarefa.
+- **DESIRABILITY:** “quero isso na minha rotina” — a experiência reduz esforço de forma agradável,
+  confiável e antecipada.
+- **HABIT:** “volto porque existe mudança relevante para processar” — o gatilho é novidade real, não
+  compulsão ou calendário artificial.
+- **WILLINGNESS TO PAY:** “não quero voltar a fazer sozinho o trabalho que este serviço faz por mim” —
+  continuidade e delegação justificam assinatura.
+
+Essas frases não são copy final. Uma feature pode ser útil sem gerar desejo; um produto desejável pode
+ser usado episodicamente; uso frequente pode não gerar pagamento. Cada transição é hipótese separada.
 
 ## 2. Psicologia de compra legítima
 
@@ -177,7 +219,8 @@ escolher o melhor sinal e sua janela.
 
 ## 5. O que pode significar “uma Dose”
 
-Uma Dose deve ser uma **unidade finita de atenção**, não sinônimo de artigo. Ela contém um conjunto
+Uma Dose deve ser uma **quantidade administrável de mudança científica que merece atenção agora** — uma
+unidade finita de atenção, não sinônimo de artigo nem alegação de “toda a ciência”. Ela contém um conjunto
 delimitado por escopo e tempo, uma ordem explicável e ações de decisão. O nome só é útil se responder:
 “qual universo foi considerado?”, “por que estes itens?”, “o que já processei?” e “quando haverá outra?”.
 
@@ -188,10 +231,19 @@ delimitado por escopo e tempo, uma ordem explicável e ações de decisão. O no
 | C. Seleção periódica por relevância | Curadoria por uma janela comunicada (por exemplo, semanal).                           | Mais tempo para classificação e rotina menos intrusiva.              | Pode ser lenta para temas de alta urgência e inadequada a diferentes segmentos.                                |
 | D. Combinação contextual            | Prioridades finitas + demais atualizações, com cadência base e exceções justificadas. | Preserva finitude sem esconder cobertura; adapta-se a novidade real. | É mais complexa de explicar e medir; requer regras de corte e alertas confiáveis.                              |
 
-**PROPOSED PRODUCT DECISION para teste, não escolha final:** começar a pesquisa com D. Exemplo somente:
-se o sistema encontrar 17 publicações relevantes, mostrar “3 prioritárias + 14 outras atualizações”.
-Esses números **não são regra**. “Prioritária” deve ter motivo verificável e o restante não pode ser
-escondido para fabricar ansiedade.
+**PROPOSED PRODUCT DECISION para teste, não escolha final:** começar a pesquisa com D e duas camadas:
+**PRIORITIZED LAYER + RELEVANT UNIVERSE FOUND WITHIN THE COVERED SCOPE**. Em linguagem de produto:
+“Prioridades da sua Dose” + “Outras atualizações encontradas no seu escopo”. Exemplo somente: se o
+sistema encontrar 17 publicações relevantes, mostrar “3 prioritárias + 14 outras atualizações”. Esses
+números **não são regra**.
+
+A arquitetura resolve uma tensão central: mostrar pouco demais pode omitir valor; mostrar tudo com a mesma
+hierarquia recria PubMed ou feed infinito. A camada priorizada oferece finitude psicológica; a camada do
+universo encontrado evita invisibilidade artificial. “Prioritária” precisa de motivo verificável, e
+“universo” significa somente o que as fontes e a janela declaradas efetivamente cobriram.
+
+“Terminei minha Dose” deve significar “decidi o que fazer com esta seleção”, nunca “li toda a ciência
+existente”.
 
 ### Anatomia conceitual
 
@@ -206,12 +258,27 @@ Loop: **descobrir → entender o suficiente → decidir → salvar/ler → concl
 houver novidade**. Não há feed infinito: paginação pode existir para cobertura, mas a unidade mantém
 fim e progresso reais.
 
+Uma Dose vazia também pode entregar valor: “nenhuma atualização relevante encontrada desde sua última
+Dose”, acompanhado de escopo, janela e estado da atualização. Isso reduz a necessidade de conferir fontes
+manualmente e pode aumentar confiança. O produto nunca fabrica atividade para sustentar engagement.
+
 ## 6. Free versus Pro: modelos para validar
 
 Princípio derivado do Core Job:
 
-- **Free:** experimentar repetidamente a descoberta, priorização e confiança — não apenas ver uma demo.
-- **Pro:** delegar acompanhamento mais completo, contínuo e ajustável — não “pagar para ter ciência”.
+- **Free:** experimentar repetidamente descoberta real, personalização, priorização, proveniência e a
+  sensação de concluir uma Dose — não ver uma demo mutilada.
+- **Pro:** delegar uma parcela maior do acompanhamento, de modo mais amplo, contínuo e ajustável — não
+  “pagar para ter ciência” nem acumular features.
+
+Formulação conceitual para avaliar, não copy aprovada: **“Free demonstra a inteligência do Dose; Pro
+transforma essa inteligência em acompanhamento.”** O limite futuro pode estar em cobertura, quantidade,
+temas, continuidade, automação, profundidade, histórico, summaries ou alertas; esta etapa não escolhe a
+dimensão.
+
+O valor Pro pode ser entendido em três camadas: **COVERAGE** (quanto do escopo coberto é acompanhado e
+apresentado), **CONTINUITY** (mudança, retomada, histórico e alertas) e **COMPREHENSION** (ajuda estruturada
+para decidir o que aprofundar). IA pode amplificar a terceira camada; não constitui categoria de assinatura.
 
 Nenhum modelo abaixo é vencedor.
 
@@ -276,8 +343,10 @@ de suficiência, confiança e interesse em cobertura. Não expor limite como esc
 **Questão aberta:** guidelines/diretrizes importantes devem ser Premium? A recomendação para teste é
 **não usar a descoberta de um evento excepcional como isca bloqueada**. Quando uma diretriz pertence ao
 escopo Free e foi legitimamente descoberta, mostrá-la pode ser a prova mais forte de que o Dose funciona.
-Premium pode monetizar o sistema ao redor: cobertura maior, acompanhamento, alerta personalizado,
-organização, histórico, resumo estruturado elegível e, apenas futuramente, comparação temporal confiável.
+A mensagem conceitual poderia ser “algo importante aconteceu em um tema que você acompanha”. Free pode
+ser o lugar onde essa competência é provada; Premium pode monetizar o sistema ao redor: cobertura maior,
+acompanhamento, alerta personalizado, contexto, relações com outros eventos, organização, histórico,
+resumo estruturado elegível e, apenas futuramente, comparação temporal confiável.
 
 Isso não equivale a promessa de detectar toda guideline, classificá-la corretamente ou fornecer seu
 texto. Eventos excepcionalmente importantes exigem critérios editoriais/científicos definidos e
@@ -333,7 +402,7 @@ Sem desenhar UI, sua hierarquia informacional deve permitir responder:
 5. O que salvei ou deixei para depois?
 6. Existe evento excepcional, segundo qual critério?
 7. Qual é a cobertura, a atualização e o estado dos dados?
-8. O que significa concluir esta Dose e quando faz sentido voltar?
+8. Esta Dose acabou? Existe mais conteúdo relevante encontrado caso eu queira aprofundar?
 
 ### Indicadores
 
@@ -345,8 +414,10 @@ Sem desenhar UI, sua hierarquia informacional deve permitir responder:
   medida, “artigo mais importante” ou “mudará sua prática”. Sem denominador e universo auditáveis,
   porcentagem de atualização é ficção matemática.
 
-A Home deve orientar decisão científica, não ser um dashboard de vaidade. Métricas de streak/minutos
-existentes não são automaticamente parte desta direção.
+A Home deve ser uma resposta preparada, não um dashboard de vaidade. Ao abrir, o usuário deveria sentir
+“alguém já organizou isso para mim”: o que mudou, o que vem primeiro, por que apareceu, o que foi adiado e
+se existe mais profundidade. Métricas de streak/minutos existentes não são automaticamente parte desta
+direção.
 
 ## 10. Retenção e hábito
 
@@ -363,15 +434,25 @@ e feedback → próxima seleção. Alertas só antecipam o retorno quando novida
 - **LONG-TERM VALUE:** manter memória pesquisável/portátil do que foi visto, lido, descartado ou salvo e
   acompanhar linhas temáticas sem reconstruir contexto.
 
-**O que começa a fazer falta ao parar:** não um streak, mas a delegação — volta o trabalho de verificar
-fontes, reconciliar alertas, decidir prioridade e lembrar onde parou. Esse “absence value” é legítimo
-quando decorre de serviço prestado; não pode decorrer de dados presos, perda ameaçada ou notificações
-ansiosas.
+**O que começa a fazer falta ao parar:** saber o que surgiu e por onde começar; a sensação delimitada de
+cobertura; prioridades, alertas pertinentes, organização, histórico, ritual de atualização e tempo poupado.
+Acima de tudo, deixa de existir a confiança de que há um sistema acompanhando o tema. Voltam a verificação
+de fontes, a reconciliação de alertas, a decisão de prioridade e a reconstrução de contexto.
+
+Esse “absence value” é legítimo somente quando decorre do trabalho prestado. Nunca pode vir de dados
+presos, ameaça, perda artificial, conteúdo retido, dificuldade de cancelar ou interoperabilidade
+intencionalmente ruim.
+
+**HYPOTHESIS TO VALIDATE — confiança como retenção:** proveniência não é só guardrail; pode ser parte do
+motivo de voltar. O usuário deve entender de onde veio, quando saiu, por que apareceu, o que é metadata,
+abstract, original ou interpretação e quais são as limitações. Quanto mais importante a decisão
+científica, menos o Dose deve parecer mágico e mais deve parecer verificável.
 
 ## 11. Paywall e conversão
 
-**PROPOSED PRODUCT DECISION para teste:** valor primeiro → percepção honesta de limite → upgrade. Um
-paywall imediatamente após cadastro impede reconhecer relevância e força compra baseada em promessa.
+**PROPOSED PRODUCT DECISION para teste:** **VALUE → RECOGNITION OF VALUE → NATURAL LIMIT → UPGRADE
+OPPORTUNITY**. Um paywall por mera abertura de página ou imediatamente após cadastro impede reconhecer
+relevância e força compra baseada em promessa.
 
 ### Momentos naturais
 
@@ -394,54 +475,79 @@ Falha operacional não é oportunidade de venda.
 
 Evitar “não fique para trás”, urgência, contagem regressiva e importância clínica não demonstrada.
 
-## 12. Premium Value Thesis
+### Funil conceitual, não analytics implementados
 
-**PROPOSED PRODUCT DECISION:** profissionais pagarão não para possuir artigos ou IA, mas para delegar ao
-Dose, dentro de um escopo transparente, o trabalho recorrente de acompanhar, triar, explicar e preservar
-continuidade da literatura relevante.
+> **ACQUISITION** (promessa compreensível) → **ONBOARDING** (especialidade + interesses suficientes) →
+> **ACTIVATION** (primeira Dose real e reconhecidamente relevante) → **FIRST VALUE** (ação útil) →
+> **REPEAT VALUE** (nova literatura → nova Dose) → **RETENTION** (parte do processo de atualização) →
+> **MONETIZATION** (desejo de ampliar/delegar mais trabalho)
 
-- **Functional value:** cobertura e personalização mais amplas, prioridades explicáveis, automação,
-  ferramentas de compreensão e organização.
-- **Emotional value:** alívio e controle por saber que o escopo escolhido está sendo acompanhado, sem
-  prometer vigilância total.
-- **Recurring value:** cada mudança real renova o serviço; a assinatura compra trabalho contínuo, não um
-  pacote estático de features.
-- **Switching-loss / absence value:** ao sair, retorna o esforço de monitorar e reconstruir contexto.
-  Histórico/exportação devem continuar honestos; nenhuma perda artificial ou incompatibilidade criada.
+Cada passagem exige evidência própria. Cadastro não é ativação; abertura não é valor; frequência não é
+retenção se não houver novidade; clique em upgrade não é willingness-to-pay.
 
-O comportamento que sustentaria “eu pagaria para continuar” é o usuário confiar repetidamente em “pode
-deixar que o Dose acompanhe isso para mim”, receber itens pertinentes e sentir falta do trabalho poupado
-quando o serviço é retirado. Isso ainda é **HYPOTHESIS TO VALIDATE**.
+## 12. Why would someone pay for Dose?
 
-## 13. Segmentos comportamentais provisórios
+**HYPOTHESIS TO VALIDATE:** alguém poderia pagar porque o Dose executa repetidamente um trabalho que hoje
+exige atenção manual: acompanhar um escopo, encontrar mudanças, organizar o universo encontrado,
+priorizar, preservar contexto e facilitar a decisão de aprofundar. O benefício não depende de dashboard,
+IA, gráficos, estética ou quantidade de controles.
 
-Não são personas demográficas nem estimativas de mercado.
+- **Trabalho recorrente:** a preparação acontece entre visitas, não apenas durante o uso.
+- **Cobertura delimitada e personalização:** mais do escopo escolhido é acompanhado com relevância pessoal.
+- **Continuidade:** o usuário sabe o que mudou, onde parou e o que deixou para depois.
+- **Economia de esforço:** busca, triagem e organização deixam de ser reconstruídas a cada sessão.
+- **Redução de carga mental:** a atualização ganha começo, prioridade, fim e próximo retorno.
+- **Compreensão:** ferramentas estruturadas ajudam a decidir o que merece leitura; IA é um meio possível.
 
-| Segmento                                  | Job dominante                                       | Intensidade provável da dor                  | Uso esperado                                              | Razão potencial para pagar                      | Risco de baixo valor                                                             |
-| ----------------------------------------- | --------------------------------------------------- | -------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- |
-| Especialista clínico com pouco tempo      | Manter radar focal sem busca extensa.               | Alta se volume/ritmo do tema forem altos.    | Doses curtas, original em itens-chave, alertas seletivos. | Delegação, relevância e economia de tempo.      | Pouca novidade ou prioridade pouco confiável.                                    |
-| Médico academicamente ativo               | Cobrir literatura e voltar a evidências.            | Alta, mas exige amplitude e precisão.        | Frequente, múltiplos temas, histórico e fontes.           | Cobertura, filtros e organização.               | Ferramentas especializadas existentes podem ser superiores.                      |
-| Residente                                 | Construir mapa da área e identificar estudos-chave. | Potencialmente alta, com orçamento sensível. | Exploração e compreensão guiada.                          | Estrutura, continuidade e summaries confiáveis. | Necessidade educacional pode divergir de “o que mudou”; preço pode inviabilizar. |
-| Professor/preceptor                       | Encontrar material atual para discussão/ensino.     | Episódica ou semanal.                        | Salvar, organizar e compartilhar fontes.                  | Recuperação, cobertura e preparação.            | Colaboração/editorial não existem como capacidade verificada.                    |
-| Profissional acompanhando tema específico | Vigiar uma condição/intervenção estreita.           | Muito alta durante períodos específicos.     | Alertas e retornos orientados por novidade.               | Sinal seletivo e continuidade.                  | Baixo volume reduz recorrência; plano amplo parece desperdício.                  |
+### Premium Value Thesis revisada
 
-Entrevistas e comportamento devem decidir segmento inicial; “todos os médicos” dilui promessa e
-qualidade de personalização.
+**PROPOSED PRODUCT DECISION:** Pro não é um pacote de “mais features”. É a delegação de uma parcela maior
+da atualização científica: cobertura mais ampla dentro de limites explícitos, continuidade entre mudanças
+e ajuda verificável para compreender e decidir. Seu valor funcional é trabalho poupado; o emocional é
+alívio e controle; o recorrente é o acompanhamento entre visitas; e o valor de ausência é a volta do
+trabalho manual — nunca lock-in artificial.
 
-## 14. Diferenciação como hipótese
+O comportamento que sustentaria “eu pagaria para continuar” é confiar repetidamente em “pode deixar que
+o Dose acompanhe isso para mim”, receber itens pertinentes e perceber o custo de reconstruir o processo
+sem o serviço. Isso permanece hipótese, não evidência de demanda.
+
+## 13. Segmentação provisória orientada à dor
+
+Não são personas, ICP final, demografia nem estimativas de mercado. `HIGH / MEDIUM / LOW PAIN` são
+hipóteses qualitativas a investigar, não pontuação ou fato.
+
+| Segmento comportamental                                    | Dor aparente                    | Job e comportamento provável                                                          | Razão potencial para pagar                  | Risco de baixo valor                                                        |
+| ---------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
+| Pouco tempo + alto compromisso com atualização             | **HIGH PAIN — hipótese**        | Quer prioridade pronta, fonte rápida e ritual curto.                                  | Delegação, seletividade e tempo recuperado. | Frequência baixa ou seleção imprecisa elimina confiança.                    |
+| Academicamente ativo ou usando múltiplos mecanismos        | **HIGH PAIN — hipótese**        | Reconcilia buscas, newsletters, alertas e salvos; precisa de cobertura e recuperação. | Coordenação, histórico e filtros.           | Ferramentas especializadas atuais podem resolver melhor.                    |
+| Acompanha tema que muda rápido ou em fase decisiva         | **HIGH/MEDIUM PAIN — hipótese** | Quer novidade pertinente e alerta seletivo durante uma janela.                        | Continuidade e sinal oportuno.              | Necessidade pode ser temporária; alerta ruidoso destrói valor.              |
+| Sente atraso ou tarefa infinita com literatura             | **MEDIUM PAIN — hipótese**      | Busca redução, orientação e um fim alcançável.                                        | Alívio e rotina sustentável.                | Culpa não pode ser usada comercialmente; baixa prioridade pode impedir uso. |
+| Aprende de forma estruturada, mas sem urgência de novidade | **MEDIUM/LOW PAIN — hipótese**  | Explora explicações, estudos-chave e salvos.                                          | Organização e compreensão.                  | Job educacional pode não sustentar monitoramento ou assinatura.             |
+| Já possui rotina simples e satisfatória                    | **LOW PAIN — hipótese**         | Consulta poucas fontes e não sente fragmentação.                                      | Pouca razão evidente.                       | Dose acrescenta outra ferramenta e mais trabalho.                           |
+
+Pesquisa deve encontrar onde dor, frequência, confiança e capacidade de pagar coincidem; esta tarefa não
+escolhe ICP.
+
+## 14. Diferenciação e categoria como hipótese
 
 O Dose não pretende ser PubMed com interface bonita, chatbot de artigos, feed infinito, gerador de
 resumo, dashboard de produtividade, rede social médica, prontuário nem clone de UpToDate. Ele também não
 deve prometer suporte à decisão clínica no ponto de cuidado sem outro escopo e validação.
 
-A combinação potencial é:
+A diferença conceitual entre substitutos é:
 
-> discovery + personalização + priorização + compreensão + continuidade + confiança científica
+- **SEARCH TOOL:** “encontre algo quando você procura”.
+- **SUMMARY TOOL:** “explique algo que você trouxe”.
+- **CONTINUOUS UPDATE SERVICE:** “acompanhe um escopo e prepare mudanças relevantes antes de você
+  procurar”.
 
-Nenhum elemento isolado é vantagem comprovada. **HYPOTHESIS TO VALIDATE:** a orquestração coerente —
-especialmente seleção finita e memória do que mudou — produz valor superior ao conjunto fragmentado de
-alternativas. Não há pesquisa competitiva, dado de preferência ou vantagem defensável verificados neste
-Blueprint.
+**HYPOTHESIS TO VALIDATE:** a terceira categoria é o território desejável do Dose. Sua combinação seria
+**discovery + personalização + priorização + compreensão + continuidade + confiança científica**. Nenhum
+elemento isolado é vantagem comprovada; a possível diferenciação está na orquestração, sobretudo no
+trabalho entre visitas, na seleção finita e na memória do que mudou.
+
+Não há pesquisa competitiva, preferência declarada ou vantagem defensável verificadas. A categoria pode
+ser incompreendida, pouco desejada ou já resolvida pelos substitutos.
 
 ## 15. Métricas candidatas
 
@@ -495,77 +601,89 @@ Os preços já presentes na UI/README são parte do protótipo existente e **nã
 Blueprint como decisão final**. Antes de preço, definir unidade de valor e custo confiável; depois testar
 arquiteturas de oferta com consentimento, sem cobrar até a infraestrutura real estar autorizada.
 
-## 18. Princípios éticos de monetização
+## 18. Marketing e monetização: persuasão sem manipulação
 
-### O Dose não monetiza
+**PROPOSED PRODUCT PRINCIPLE:** persuasão é permitida; manipulação não. O Dose pode vender com convicção
+a conveniência, tempo recuperado, controle, continuidade, profissionalismo, confiança, domínio,
+tranquilidade e trabalho realizado em segundo plano. Ética não exige linguagem tímida; exige que uma
+promessa desejável seja verdadeira, delimitada e demonstrável.
 
-- medo fabricado, culpa profissional ou risco clínico exagerado;
-- falsa competência, comparação social ou certificação implícita;
-- ciência falsificada, proveniência escondida ou confiança inflada;
-- urgência artificial, FOMO, notificações excessivas ou conteúdo retido para ansiedade;
-- falha do sistema, indisponibilidade ou direitos de conteúdo que não possui;
-- lock-in artificial de histórico e dados do usuário.
+Não monetizar medo fabricado, culpa profissional, risco clínico exagerado, falsa competência, comparação
+social, ciência falsificada, urgência/FOMO/escassez artificiais, falha do sistema ou lock-in de dados.
+Pode monetizar personalização, cobertura delimitada, automação consentida, profundidade, continuidade,
+organização, operação confiável e esforço poupado.
 
-### O Dose pode monetizar legitimamente
+### Product Principles Candidates
 
-- conveniência e economia de tempo demonstráveis;
-- personalização e cobertura delimitadas;
-- automação consentida e alertas calibrados;
-- profundidade de compreensão com proveniência;
-- continuidade, histórico e organização;
-- operação confiável e transparência.
+São candidatos para futura aprovação, **não PRODUCT TRUTH**:
 
-### Regras de produto
-
-1. A fonte original não perde visibilidade por causa do plano.
-2. Metadata, abstract, full text, editorial e IA permanecem distintos.
-3. Relevância personalizada nunca é apresentada como qualidade científica.
-4. Free deve conseguir experimentar o Core Job, não somente ver promessa.
-5. Upgrade aparece por limite real após valor; cancelar é claro e sem punição inventada.
-6. Alertas são opt-in, controláveis e proporcionais; ausência de novidade é um resultado válido.
-7. Limites de cobertura, falhas e indisponibilidade são mostrados antes de claims de completude.
-8. Mudanças de plano nunca alteram autoridades de Auth/onboarding/entitlement.
+1. **Ciência real antes de conteúdo convincente:** vazio é melhor que demonstração disfarçada.
+2. **Relevância antes de volume:** mais itens não significam mais valor.
+3. **Finitude sem invisibilidade:** priorizar sem esconder o universo encontrado no escopo coberto.
+4. **Fonte antes de interpretação:** origem, tipo de conteúdo e limitações permanecem verificáveis.
+5. **Confiança compõe o produto:** não é apenas compliance; sustenta desejo e retorno.
+6. **Valor antes do paywall:** upgrade responde a valor reconhecido e limite natural.
+7. **Free experimenta a mágica:** descoberta, personalização, prioridade, proveniência e conclusão reais.
+8. **Pro vende delegação:** coverage, continuity e comprehension, não escassez artificial.
+9. **Ausência de novidade é informação:** nunca fabricar atividade para engagement.
+10. **IA amplifica compreensão:** não substitui evidência, descoberta confiável nem julgamento.
 
 ## 19. Top Product Hypotheses to Validate
 
 Ordenadas por dependência lógica, não por confiança.
 
-1. **Hipótese:** os segmentos iniciais têm uma dor recorrente e importante em acompanhar literatura.
-   **Por que importa:** sem problema frequente não há hábito nem assinatura. **Como testar:** entrevistas
-   de comportamento passado e diário de busca. **Se errada:** estreitar segmento/job ou abandonar a
-   tese de monitoramento contínuo.
-2. **Hipótese:** usuários delegarão parte do monitoramento a um serviço com cobertura delimitada.
-   **Por que importa:** delegação é o núcleo Premium. **Como testar:** concierge recorrente com fontes e
-   limites explícitos. **Se errada:** posicionar como ferramenta pontual de busca/organização.
-3. **Hipótese:** literatura real suficiente pode ser descoberta/classificada com qualidade operacional.
-   **Por que importa:** não há valor sem oferta confiável. **Como testar:** piloto autorizado, auditoria
-   clínica de precisão/cobertura e falhas. **Se errada:** revisar fontes, temas e promessa antes da UX.
-4. **Hipótese:** preferências explícitas produzem priorização mais valiosa que feed amplo.
-   **Por que importa:** personalização é o mecanismo de redução de ruído. **Como testar:** comparação
-   cega de listas reais e explicação dos matches. **Se errada:** investir em curadoria temática/consulta,
-   não personalização individual.
-5. **Hipótese:** uma Dose finita é compreendida como progresso útil, não limitação artificial.
-   **Por que importa:** sustenta ativação e hábito saudável. **Como testar:** protótipos com decisão e
-   conclusão sobre lotes reais. **Se errada:** usar inbox/consulta com filtros, sem ritual de conclusão.
-6. **Hipótese:** uma Dose Free pequena demonstra o Core Job de modo suficiente.
-   **Por que importa:** define aquisição e limite ético. **Como testar:** variar quantidade/cobertura e
-   medir pertinência, suficiência e retorno. **Se errada:** ampliar Free ou limitar outra dimensão.
-7. **Hipótese:** continuidade e cobertura ampliada geram willingness-to-pay.
-   **Por que importa:** sustenta assinatura, não compra avulsa. **Como testar:** concierge longitudinal,
-   fake-door ético e teste de ausência. **Se errada:** testar outra unidade de cobrança ou manter produto
-   gratuito/adjacente.
-8. **Hipótese:** summaries aumentam valor, mas não são o principal motivo da assinatura.
-   **Por que importa:** evita dependência de IA/custo como produto. **Como testar:** experiência com/sem
-   summary após relevância estabelecida. **Se errada:** reavaliar tese, custo e risco sem esconder fonte.
-9. **Hipótese:** alertas de alta pertinência melhoram retorno sem ansiedade ou fadiga.
-   **Por que importa:** reduz dependência de lembrar do app. **Como testar:** concierge opt-in e controles
-   de frequência. **Se errada:** manter retorno periódico/in-app e eliminar alertas.
-10. **Hipótese:** proveniência e explicação de prioridade aumentam confiança e uso qualificado.
-    **Por que importa:** confiança científica é guardrail e parte da diferenciação. **Como testar:**
-    tarefas de identificação de origem + entrevistas + acesso ao original. **Se errada:** redesenhar
-    linguagem/hierarquia; nunca remover proveniência apenas para elevar conversão.
+1. **Problema recorrente:** segmentos específicos sentem custo relevante e frequente ao acompanhar
+   literatura. **Importa:** sem dor recorrente não há hábito ou assinatura. **Teste:** entrevistas sobre
+   comportamento passado + diário. **Se errada:** estreitar segmento/job ou abandonar monitoramento.
+2. **Desejo de delegação:** usuários confiarão parte do acompanhamento a um serviço delimitado que trabalha
+   entre visitas. **Importa:** é o núcleo Premium. **Teste:** concierge recorrente. **Se errada:** assumir
+   produto pontual de busca/organização.
+3. **Capacidade científica real:** fontes, ingestão e classificação conseguem oferta suficiente e
+   confiável no escopo inicial. **Importa:** sem supply real não há promessa. **Teste:** piloto autorizado
+   e auditoria clínica. **Se errada:** revisar fontes/temas antes da UX.
+4. **Personalização relevante:** preferências explícitas geram prioridade mais útil que um feed amplo.
+   **Importa:** reduz ruído. **Teste:** comparação cega de listas e explicações. **Se errada:** investir em
+   curadoria temática/consulta, não personalização individual.
+5. **Finitude com cobertura visível:** Dose priorizada + universo encontrado produz controle sem sensação
+   de omissão. **Importa:** resolve o paradoxo central. **Teste:** lotes reais com duas camadas. **Se errada:**
+   testar inbox/filtros sem ritual de conclusão.
+6. **Confiança gera retorno:** proveniência e explicação da prioridade aumentam confiança e uso qualificado.
+   **Importa:** confiança é parte do valor, não só guardrail. **Teste:** tarefas de identificação de origem,
+   abertura da fonte e entrevistas. **Se errada:** rever linguagem/hierarquia, nunca ocultar proveniência.
+7. **Continuidade faz falta:** mudança, histórico e contexto poupados geram retorno e valor de ausência.
+   **Importa:** sustenta assinatura. **Teste:** concierge longitudinal e teste de ausência ético. **Se
+   errada:** produto pode ser episódico e inadequado a assinatura.
+8. **Free demonstra a mágica:** uma experiência Free completa do Core Job gera valor antes do limite.
+   **Importa:** sustenta aquisição ética. **Teste:** variar dimensão do limite e medir suficiência/retorno.
+   **Se errada:** ampliar Free ou mudar onde limitar.
+9. **Delegação gera willingness-to-pay:** ampliar coverage, continuity e comprehension vale uma troca real.
+   **Importa:** separa desejo de elogio. **Teste:** fake-door ético, trade-offs e compromisso progressivo.
+   **Se errada:** revisar oferta/unidade comercial ou não monetizar por assinatura.
+10. **IA é amplificador, não produto:** summaries melhoram compreensão, mas não são o principal motivo de
+    assinar. **Importa:** evita proposta copiável e dependência de custo. **Teste:** experiência com/sem
+    summary após relevância estabelecida. **Se errada:** reavaliar tese, custo e risco sem esconder fonte.
 
-## 20. Decisões que não devem ser tomadas ainda
+## 20. Why would they not pay?
+
+Razões comerciais reais, ainda **NOT VERIFIED**, que podem invalidar a tese:
+
+- a dor é fraca, rara ou atualização científica não é prioridade;
+- a literatura do escopo tem frequência baixa ou relevância inconsistente;
+- busca, newsletter, alerta, colega ou rotina atual já resolve o problema satisfatoriamente;
+- a priorização não inspira confiança ou exige mais conferência do que economiza;
+- o produto adiciona triagem, notificações e configuração em vez de remover trabalho;
+- Free satisfaz completamente e Pro não amplia um resultado valorizado;
+- coverage, continuity e comprehension não justificam assinatura recorrente;
+- summaries/IA são facilmente substituíveis e não criam valor diferencial;
+- alertas incomodam, chegam tarde ou não são acionáveis;
+- ausência de novidade torna o serviço esquecível em temas lentos;
+- qualidade científica, proveniência ou disponibilidade variam a ponto de quebrar confiança;
+- o segmento pode desejar o produto, mas não priorizar orçamento para ele.
+
+A tese falha comercialmente se o usuário achar o Dose interessante, porém dispensável. Não se deve
+compensar baixa disposição a pagar com ansiedade, retenção de conteúdo ou mais features sem job.
+
+## 21. Decisões que não devem ser tomadas ainda
 
 - Número exato de artigos/atualizações no Free, inclusive “2–3”.
 - Frequência diária, semanal, por evento ou híbrida da Dose.
@@ -583,23 +701,25 @@ Ordenadas por dependência lógica, não por confiança.
 
 O documento no repositório não converte nenhum desses itens em arquitetura aprovada.
 
-## 21. Roadmap conceitual condicionado a evidência
+## 22. Roadmap conceitual condicionado a evidência
 
 1. **Validar proposta de valor:** entrevistas por segmento e reconstrução do comportamento atual.
 2. **Validar literatura real:** em operação separadamente autorizada, confirmar fontes, metadata,
    proveniência, volume e direitos; infraestrutura local não basta.
 3. **Validar relevância/priorização:** auditar classificação e listas com critérios clínicos; o ranking
    server-side existente é ponto de partida técnico, não resultado validado.
-4. **Validar primeira Dose:** concierge/protótipo com dados reais, finitude, explicações e estados vazios.
-5. **Conectar UX real:** somente após aprovação, substituir consumidores hardcoded por fronteiras
+4. **Validar primeira Dose e confiança:** concierge/protótipo com dados reais, finitude, explicações,
+   proveniência e estados vazios.
+5. **Validar uso repetido:** observar nova literatura → nova Dose e se continuidade passa a fazer falta.
+6. **Conectar UX real:** somente após aprovação, substituir consumidores hardcoded por fronteiras
    autenticadas sem enfraquecer Auth/onboarding/RLS; incluir erro, vazio, loading e proveniência.
-6. **Validar summaries:** amostra elegível, fidelidade e utilidade; manter geração explícita, server-side
+7. **Validar summaries:** amostra elegível, fidelidade e utilidade; manter geração explícita, server-side
    e custo controlado. A infraestrutura preparada continua desativada até autorização.
-7. **Testar Free/Pro:** comparar os modelos deste documento sem tratar preços/features atuais como
+8. **Testar Free/Pro:** comparar os modelos deste documento sem tratar preços/features atuais como
    verdade aprovada.
-8. **Testar disposição a pagar:** fake-door ético e compromisso progressivamente mais real, sem cobrança.
-9. **Somente depois conectar pagamento real:** escolher provider, revisar segurança/operação, ativar
-   entitlement server-side e testar sandbox antes de qualquer produção.
+9. **Testar disposição a pagar:** fake-door ético e compromisso progressivamente mais real, sem cobrança.
+10. **Somente depois conectar pagamento real:** escolher provider, revisar segurança/operação, ativar
+    entitlement server-side e testar sandbox antes de qualquer produção.
 
 ### Critério de avanço
 
@@ -607,7 +727,7 @@ Cada etapa deve registrar evidência, falhas, segmento e o que permaneceu **NOT 
 com fake/mocks provam contratos, não integração externa. Nenhuma etapa autoriza a seguinte por simples
 existência de código.
 
-## 22. Principais riscos e perguntas abertas
+## 23. Principais riscos e perguntas abertas
 
 1. **Oferta vazia ou irregular:** pipeline preparado sem dados reais suficientes produz uma Home sem
    valor. Qual volume e latência existem por tema?
@@ -629,7 +749,7 @@ existência de código.
    permitem cada apresentação?
 10. **Notificações e ansiedade:** o que é suficientemente relevante para interromper o usuário?
 
-## 23. Registro final de não-verificação
+## 24. Registro final de não-verificação
 
 Este Blueprint **não verificou** ambiente remoto, produção, Supabase, Vercel, estado aplicado de
 migrations, dados científicos persistidos, execução do piloto, qualidade de regras sobre corpus real,
