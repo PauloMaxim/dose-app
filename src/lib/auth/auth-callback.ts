@@ -26,6 +26,19 @@ export function canReconcileFailedConfirmation(input: {
   return input.requestedKind !== "recovery" && input.remotelyConfirmed && input.hasCallbackProof;
 }
 
+export function canReconcileFailedRecovery(input: {
+  requestedKind: AuthCallbackKind;
+  revalidatedUserId: string | null;
+  recoveryProofUserId: string | null;
+}): boolean {
+  // The URL only identifies the intended flow. Authorization still requires a
+  // PASSWORD_RECOVERY event, bound to the identity freshly read from Supabase.
+  return (
+    input.requestedKind === "recovery" &&
+    Boolean(input.revalidatedUserId && input.revalidatedUserId === input.recoveryProofUserId)
+  );
+}
+
 export async function finishConfirmedIdentity(
   kind: AuthCallbackKind,
   acceptLegal: () => Promise<unknown>,
