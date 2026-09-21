@@ -26,6 +26,7 @@ const supabase = vi.hoisted(() => {
   return {
     listeners,
     getSession: vi.fn(),
+    getUser: vi.fn(),
     exchangeCodeForSession: vi.fn(),
     onAuthStateChange: vi.fn((callback: (event: string, session: Session | null) => void) => {
       listeners.push(callback);
@@ -139,6 +140,7 @@ beforeEach(() => {
   auth.reconcileEmailConfirmation.mockResolvedValue({ status: "signed-out" });
   supabase.listeners.splice(0);
   supabase.getSession.mockResolvedValue({ data: { session: null }, error: null });
+  supabase.getUser.mockResolvedValue({ data: { user: null }, error: null });
   supabase.exchangeCodeForSession.mockReset();
 });
 
@@ -536,16 +538,78 @@ describe("password recovery access corridor", () => {
 });
 
 describe("integrated password recovery callback", () => {
-  it("preserves provider proof across the SPA transition from confirm to reset", async () => {
+  async function renderFailedCallback(session: Session | null) {
+    const rootRoute = createRootRoute({
+      component: () => (
+        <AuthContext.Provider
+          value={{
+            session,
+            recoveryUserId: null,
+            recoveryPending: false,
+            callbackUserId: null,
+            hasRecoveryProof: () => false,
+            hasCallbackProof: () => false,
+            consumeRecovery: vi.fn(),
+            isPending: false,
+          }}
+        >
+          <Outlet />
+        </AuthContext.Provider>
+      ),
+    });
+    const confirmRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/auth/confirm",
+      component: Confirm,
+    });
+    const resetRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/auth/reset-password",
+      component: () => <h1>Reset indevido</h1>,
+    });
+    const router = new (await import("@tanstack/react-router")).Router({
+      routeTree: rootRoute.addChildren([confirmRoute, resetRoute]),
+      history: createMemoryHistory({ initialEntries: ["/auth/confirm"] }),
+    });
+    window.history.replaceState({}, "", "/auth/confirm?kind=recovery&code=failed-code");
+    render(<RouterProvider router={router} />);
+    return router;
+  }
+
+  it("keeps a genuinely invalid recovery callback on the error screen", async () => {
+    supabase.exchangeCodeForSession.mockResolvedValue({
+      data: { user: null },
+      error: new Error("invalid link already used"),
+    });
+    await renderFailedCallback(null);
+
+    await screen.findByRole("heading", { name: "Não foi possível confirmar" });
+    expect(screen.queryByRole("heading", { name: "Reset indevido" })).toBeNull();
+  });
+
+  it("does not promote a normal session from the recovery query parameter", async () => {
+    const normalSession = { user: { id: "normal-user", user_metadata: {} } } as Session;
+    supabase.exchangeCodeForSession.mockResolvedValue({
+      data: { user: normalSession.user },
+      error: null,
+    });
+    supabase.getUser.mockResolvedValue({ data: { user: normalSession.user }, error: null });
+    await renderFailedCallback(normalSession);
+
+    await screen.findByRole("heading", { name: "Não foi possível confirmar" });
+    expect(screen.queryByRole("heading", { name: "Reset indevido" })).toBeNull();
+  });
+
+  it("reconciles provider proof when the exchange reports its own code as invalid", async () => {
     const recoverySession = {
       user: { id: "callback-recovery-user", user_metadata: {} },
     } as Session;
+    supabase.getUser.mockResolvedValue({ data: { user: recoverySession.user }, error: null });
     supabase.exchangeCodeForSession.mockImplementation(async () => {
       // The provider was mounted on the preceding route. Deliberately deliver
       // the event only to it to exercise the callback-listener race fallback.
       supabase.listeners[0]?.("PASSWORD_RECOVERY", recoverySession);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      return { data: { user: recoverySession.user }, error: null };
+      return { data: { user: null }, error: new Error("invalid link already used") };
     });
     auth.updatePassword.mockResolvedValue({ error: null });
 
@@ -595,6 +659,7 @@ describe("integrated password recovery callback", () => {
     await router.navigate({ to: "/auth/confirm" });
 
     await screen.findByRole("heading", { name: "Criar nova senha" });
+    expect(screen.queryByRole("heading", { name: "Não foi possível confirmar" })).toBeNull();
     expect(router.state.location.pathname).toBe("/auth/reset-password");
     expect(screen.getByTestId("recovery-state").textContent).toBe("pending");
     expect(screen.queryByRole("heading", { name: "Home integrada" })).toBeNull();

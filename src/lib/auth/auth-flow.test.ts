@@ -14,6 +14,7 @@ import {
 } from "./auth-flow.ts";
 import {
   canReconcileFailedConfirmation,
+  canReconcileFailedRecovery,
   finishConfirmedIdentity,
   resolveConfirmedCallbackKind,
 } from "./auth-callback.ts";
@@ -94,6 +95,34 @@ describe("Auth V1 security boundaries", () => {
       { requestedKind: "recovery" as const, remotelyConfirmed: true, hasCallbackProof: true },
     ])
       assert.equal(canReconcileFailedConfirmation(unsafe), false);
+  });
+  it("reconciles a failed recovery exchange only for the identity bound to provider proof", () => {
+    assert.equal(
+      canReconcileFailedRecovery({
+        requestedKind: "recovery",
+        revalidatedUserId: "recovery-user",
+        recoveryProofUserId: "recovery-user",
+      }),
+      true,
+    );
+    for (const unsafe of [
+      {
+        requestedKind: "signup" as const,
+        revalidatedUserId: "recovery-user",
+        recoveryProofUserId: "recovery-user",
+      },
+      {
+        requestedKind: "recovery" as const,
+        revalidatedUserId: "normal-user",
+        recoveryProofUserId: null,
+      },
+      {
+        requestedKind: "recovery" as const,
+        revalidatedUserId: "normal-user",
+        recoveryProofUserId: "other-user",
+      },
+    ])
+      assert.equal(canReconcileFailedRecovery(unsafe), false);
   });
   it("maps expired, invalid, and already-used links to non-technical errors", () => {
     assert.match(friendlyAuthError(new Error("link expired")), /expirou/);

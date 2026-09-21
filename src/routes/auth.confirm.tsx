@@ -6,6 +6,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { acceptCurrentLegalDocuments } from "@/server/domains/account";
 import {
   canReconcileFailedConfirmation,
+  canReconcileFailedRecovery,
   finishConfirmedIdentity,
   resolveConfirmedCallbackKind,
 } from "@/lib/auth/auth-callback";
@@ -42,6 +43,7 @@ export function Confirm() {
   useEffect(() => {
     let active = true;
     let unsubscribeCallback: (() => void) | undefined;
+    let observedRecoveryUserId: string | null = null;
     void (async () => {
       try {
         const params = new URLSearchParams(window.location.search);
@@ -50,10 +52,9 @@ export function Confirm() {
         const tokenHash = params.get("token_hash");
         const otpType = params.get("type") as "signup" | "recovery" | "email_change" | null;
         const client = getSupabaseBrowserClient();
-        let sawPasswordRecovery = false;
         let confirmedUserId: string | null = null;
-        const { data: listener } = client.auth.onAuthStateChange((event) => {
-          if (event === "PASSWORD_RECOVERY") sawPasswordRecovery = true;
+        const { data: listener } = client.auth.onAuthStateChange((event, session) => {
+          if (event === "PASSWORD_RECOVERY") observedRecoveryUserId = session?.user.id ?? null;
         });
         unsubscribeCallback = () => listener.subscription.unsubscribe();
         if (code) {
@@ -79,8 +80,10 @@ export function Confirm() {
 
         // Recovery is accepted only when Supabase emits its dedicated event;
         // a forgeable `kind` query parameter can never promote a normal session.
-        const recoveryProven =
-          sawPasswordRecovery || Boolean(confirmedUserId && hasRecoveryProof(confirmedUserId));
+        const recoveryProven = Boolean(
+          confirmedUserId &&
+          (observedRecoveryUserId === confirmedUserId || hasRecoveryProof(confirmedUserId)),
+        );
         const kind = resolveConfirmedCallbackKind({
           requestedKind,
           redirectType: recoveryProven ? "recovery" : null,
@@ -96,6 +99,21 @@ export function Confirm() {
             .auth.getUser()
             .catch(() => null);
           const user = reconciliation?.data.user;
+          const recoveryProofUserId =
+            user && (observedRecoveryUserId === user.id || hasRecoveryProof(user.id))
+              ? user.id
+              : null;
+          if (
+            active &&
+            canReconcileFailedRecovery({
+              requestedKind,
+              revalidatedUserId: user?.id ?? null,
+              recoveryProofUserId,
+            })
+          ) {
+            await finishAfterIdentity("recovery");
+            return;
+          }
           if (
             active &&
             user &&
