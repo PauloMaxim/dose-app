@@ -8,7 +8,12 @@ import {
   sendPasswordRecovery,
   setAccountPassword,
 } from "./auth-actions";
-import { authRedirect, confirmationRedirectPath } from "./auth-flow";
+import {
+  authRedirect,
+  classifyRevalidatedUser,
+  confirmationRedirectPath,
+  type EmailConfirmationReconciliation,
+} from "./auth-flow";
 
 export const authEnabled = isSupabaseBrowserConfigured();
 export { GROK_PROVIDERS };
@@ -136,4 +141,20 @@ export async function getCurrentSession(): Promise<Session | null> {
   if (!authEnabled) return null;
   const { data } = await getSupabaseBrowserClient().auth.getSession();
   return data.session;
+}
+
+/**
+ * Revalidates the identity with Supabase instead of trusting getSession's local
+ * cache. This can only authenticate the current browser when it already owns a
+ * usable session; confirmation on another device never transfers that session.
+ */
+export async function reconcileEmailConfirmation(): Promise<EmailConfirmationReconciliation> {
+  if (!authEnabled) return { status: "error" };
+  try {
+    const { data, error } = await getSupabaseBrowserClient().auth.getUser();
+    if (error) return { status: "signed-out" };
+    return classifyRevalidatedUser(data.user);
+  } catch {
+    return { status: "error" };
+  }
 }

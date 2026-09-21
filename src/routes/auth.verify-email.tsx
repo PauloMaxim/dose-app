@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { AuthShell } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
 import { friendlyAuthError, maskEmail } from "@/lib/auth/auth-flow";
-import { getCurrentSession, resendSignup } from "@/lib/auth/client";
+import { reconcileEmailConfirmation, resendSignup } from "@/lib/auth/client";
 export const Route = createFileRoute("/auth/verify-email")({ component: VerifyEmail });
-function VerifyEmail() {
+export function VerifyEmail() {
   const email =
     typeof window === "undefined" ? "" : (sessionStorage.getItem("dose-auth-email") ?? "");
   const [cooldown, setCooldown] = useState(30);
@@ -27,10 +27,25 @@ function VerifyEmail() {
   }
   async function checked() {
     setBusy(true);
-    const session = await getCurrentSession();
+    const result = await reconcileEmailConfirmation();
     setBusy(false);
-    if (session?.user.email_confirmed_at) window.location.assign("/onboarding");
-    else setMessage("Ainda não encontramos a confirmação. Aguarde um instante e tente novamente.");
+    if (result.status === "confirmed") {
+      // The protected root reconciles profiles.onboarding_completed_at before
+      // deciding between onboarding and Home.
+      window.location.assign("/");
+      return;
+    }
+    if (result.status === "signed-out") {
+      setMessage(
+        "A confirmação feita em outro dispositivo não conecta esta aba. Entre com seu e-mail e senha para continuar.",
+      );
+      return;
+    }
+    setMessage(
+      result.status === "unconfirmed"
+        ? "A identidade desta sessão ainda não está confirmada. Aguarde um instante e tente novamente."
+        : "Não foi possível consultar sua conta agora. Verifique a conexão e tente novamente.",
+    );
   }
   return (
     <AuthShell
@@ -57,7 +72,8 @@ function VerifyEmail() {
         </button>
       )}
       <p className="mt-3 text-xs leading-relaxed text-muted">
-        Confirmou em outro dispositivo? Volte para entrar com seu e-mail e senha.
+        Confirmou em outro dispositivo? Esta aba não ganha acesso automaticamente: entre com seu
+        e-mail e senha.
       </p>
       <Link to="/login" className="mt-2 flex min-h-11 items-center justify-center text-sm">
         Voltar para entrar

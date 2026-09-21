@@ -18,6 +18,7 @@ const auth = vi.hoisted(() => ({
   requestPasswordReset: vi.fn(),
   updatePassword: vi.fn(),
   acceptCurrentLegalDocuments: vi.fn(),
+  reconcileEmailConfirmation: vi.fn(),
 }));
 
 const supabase = vi.hoisted(() => {
@@ -54,6 +55,8 @@ vi.mock("@/lib/auth/client", () => ({
   signUpWithPassword: auth.signUpWithPassword,
   requestPasswordReset: auth.requestPasswordReset,
   updatePassword: auth.updatePassword,
+  reconcileEmailConfirmation: auth.reconcileEmailConfirmation,
+  resendSignup: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -72,6 +75,7 @@ import { Login } from "@/routes/login";
 import { Signup } from "@/routes/auth.signup";
 import { ResetPassword } from "@/routes/auth.reset-password";
 import { Confirm } from "@/routes/auth.confirm";
+import { VerifyEmail } from "@/routes/auth.verify-email";
 
 async function renderAt(path: string) {
   const rootRoute = createRootRoute({
@@ -109,6 +113,7 @@ async function renderAt(path: string) {
       const { request } = route.useSearch() as { request?: 1 };
       if (routePath === "/login") return <Login />;
       if (routePath === "/auth/signup") return <Signup />;
+      if (routePath === "/auth/verify-email") return <VerifyEmail />;
       return <ResetPassword request={request === 1} />;
     },
   });
@@ -131,9 +136,41 @@ beforeEach(() => {
   auth.requestPasswordReset.mockResolvedValue({ error: null });
   auth.updatePassword.mockResolvedValue({ error: new Error("expected test stop") });
   auth.acceptCurrentLegalDocuments.mockResolvedValue(undefined);
+  auth.reconcileEmailConfirmation.mockResolvedValue({ status: "signed-out" });
   supabase.listeners.splice(0);
   supabase.getSession.mockResolvedValue({ data: { session: null }, error: null });
   supabase.exchangeCodeForSession.mockReset();
+});
+
+describe("email confirmation reconciliation", () => {
+  it("does not grant a session when confirmation happened on another device", async () => {
+    sessionStorage.setItem("dose-auth-email", "doctor@example.com");
+    const user = userEvent.setup();
+    await renderAt("/auth/verify-email");
+
+    await user.click(screen.getByRole("button", { name: "Já confirmei" }));
+
+    expect(auth.reconcileEmailConfirmation).toHaveBeenCalledOnce();
+    expect(
+      await screen.findByText(
+        "A confirmação feita em outro dispositivo não conecta esta aba. Entre com seu e-mail e senha para continuar.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Voltar para entrar" })).toBeTruthy();
+    expect(security.session).toBeNull();
+  });
+
+  it("does not treat an unconfirmed revalidated identity as success", async () => {
+    auth.reconcileEmailConfirmation.mockResolvedValue({ status: "unconfirmed" });
+    const user = userEvent.setup();
+    await renderAt("/auth/verify-email");
+
+    await user.click(screen.getByRole("button", { name: "Já confirmei" }));
+
+    expect(
+      await screen.findByText(/identidade desta sessão ainda não está confirmada/),
+    ).toBeTruthy();
+  });
 });
 
 afterEach(cleanup);

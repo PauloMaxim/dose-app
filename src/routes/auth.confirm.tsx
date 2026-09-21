@@ -4,7 +4,11 @@ import { AuthShell } from "@/components/auth-shell";
 import { friendlyAuthError, type AuthCallbackKind } from "@/lib/auth/auth-flow";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { acceptCurrentLegalDocuments } from "@/server/domains/account";
-import { finishConfirmedIdentity, resolveConfirmedCallbackKind } from "@/lib/auth/auth-callback";
+import {
+  canReconcileFailedConfirmation,
+  finishConfirmedIdentity,
+  resolveConfirmedCallbackKind,
+} from "@/lib/auth/auth-callback";
 import { AuthContext } from "@/lib/auth/context";
 
 export const Route = createFileRoute("/auth/confirm")({ component: Confirm });
@@ -85,6 +89,25 @@ export function Confirm() {
         if (active) await finishAfterIdentity(kind);
       } catch (error) {
         if (active) {
+          const requestedKind = new URLSearchParams(window.location.search).get(
+            "kind",
+          ) as AuthCallbackKind;
+          const reconciliation = await getSupabaseBrowserClient()
+            .auth.getUser()
+            .catch(() => null);
+          const user = reconciliation?.data.user;
+          if (
+            active &&
+            user &&
+            canReconcileFailedConfirmation({
+              requestedKind,
+              remotelyConfirmed: Boolean(user.email_confirmed_at),
+              hasCallbackProof: hasCallbackProof(user.id),
+            })
+          ) {
+            await finishAfterIdentity(requestedKind === "signup" ? "signup" : null);
+            return;
+          }
           setMessage(
             friendlyAuthError(error, "Este link não é válido, expirou ou já foi utilizado."),
           );

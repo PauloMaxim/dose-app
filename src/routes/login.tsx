@@ -45,7 +45,9 @@ export function Login() {
       setError(friendlyAuthError(result.error, "E-mail ou senha não conferem."));
       return;
     }
-    void navigate({ to: "/onboarding", replace: true });
+    // Do not guess onboarding state here. The protected root waits for the
+    // authenticated remote profile and routes accordingly.
+    void navigate({ to: "/", replace: true });
   }
   return (
     <AuthShell title="Entrar" description="Acesse sua Dose e continue de onde parou.">
