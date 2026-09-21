@@ -77,6 +77,17 @@ export async function signOut(redirectTo = "/"): Promise<void> {
   if (typeof window !== "undefined") window.location.assign(redirectTo);
 }
 
+/** Drops browser authentication after privileged account deletion, then hard-navigates publicly. */
+export async function clearDeletedAccountSession(redirectTo = "/login"): Promise<void> {
+  try {
+    if (authEnabled) {
+      await getSupabaseBrowserClient().auth.signOut({ scope: "local" });
+    }
+  } finally {
+    if (typeof window !== "undefined") window.location.replace(redirectTo);
+  }
+}
+
 export async function requestPasswordReset(email: string): Promise<AuthResult> {
   if (!authEnabled) return { error: unavailable() };
   const redirectTo = authRedirect(confirmationRedirectPath("recovery"));

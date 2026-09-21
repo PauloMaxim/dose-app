@@ -40,4 +40,26 @@ describe("account deletion security", () => {
     );
     assert.equal(deleted, false);
   });
+
+  it("does not report success when deleting the user fails after revocation", async () => {
+    const calls: string[] = [];
+    await assert.rejects(
+      () =>
+        revokeSessionsAndDeleteUser(
+          {
+            async revokeSessions() {
+              calls.push("revoke");
+              return { error: null };
+            },
+            async deleteUser() {
+              calls.push("delete");
+              return { error: new Error("unavailable") };
+            },
+          },
+          { userId: "verified-user", accessToken: "verified-token" },
+        ),
+      /account deletion failed/,
+    );
+    assert.deepEqual(calls, ["revoke", "delete"]);
+  });
 });
