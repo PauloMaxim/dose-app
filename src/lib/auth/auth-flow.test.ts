@@ -133,7 +133,7 @@ describe("Auth V1 security boundaries", () => {
     );
   });
   it("signup confirmation and resend both register legal acceptance", async () => {
-    assert.equal(confirmationRedirectPath("signup"), "/auth/confirm?kind=signup");
+    assert.equal(confirmationRedirectPath("signup"), "/auth/action?kind=signup");
     for (const source of ["initial", "resend"]) {
       let accepts = 0;
       const kind = resolveConfirmedCallbackKind({

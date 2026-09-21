@@ -36,7 +36,43 @@ export function authRedirect(path: string): string {
 }
 
 export function confirmationRedirectPath(kind: Exclude<AuthCallbackKind, null>): string {
-  return `/auth/confirm?kind=${kind}`;
+  return `/auth/action?kind=${kind}`;
+}
+
+export type AuthEmailAction = {
+  kind: Exclude<AuthCallbackKind, null>;
+  type: "signup" | "recovery" | "email_change";
+  tokenHash: string;
+};
+
+const actionKindByType = {
+  signup: "signup",
+  recovery: "recovery",
+  email_change: "email-change",
+} as const;
+
+/**
+ * Parses only the shape of an email action. This deliberately performs no
+ * Supabase call: the token remains unconsumed until the user continues.
+ */
+export function parseAuthEmailAction(search: string): AuthEmailAction | null {
+  const params = new URLSearchParams(search);
+  const type = params.get("type");
+  const tokenHash = params.get("token_hash");
+  const kind = params.get("kind");
+  if (!(type && type in actionKindByType) || !tokenHash?.trim()) return null;
+  const expectedKind = actionKindByType[type as keyof typeof actionKindByType];
+  if (kind !== expectedKind) return null;
+  return { kind: expectedKind, type: type as AuthEmailAction["type"], tokenHash };
+}
+
+export function authConfirmationPath(action: AuthEmailAction): string {
+  const params = new URLSearchParams({
+    kind: action.kind,
+    token_hash: action.tokenHash,
+    type: action.type,
+  });
+  return `/auth/confirm?${params.toString()}`;
 }
 
 export function maskEmail(email: string): string {

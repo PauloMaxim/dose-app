@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   createMemoryHistory,
@@ -27,6 +27,7 @@ const supabase = vi.hoisted(() => {
     listeners,
     getSession: vi.fn(),
     getUser: vi.fn(),
+    verifyOtp: vi.fn(),
     exchangeCodeForSession: vi.fn(),
     onAuthStateChange: vi.fn((callback: (event: string, session: Session | null) => void) => {
       listeners.push(callback);
@@ -76,6 +77,7 @@ import { Login } from "@/routes/login";
 import { Signup } from "@/routes/auth.signup";
 import { ResetPassword } from "@/routes/auth.reset-password";
 import { Confirm } from "@/routes/auth.confirm";
+import { AuthAction } from "@/routes/auth.action";
 import { VerifyEmail } from "@/routes/auth.verify-email";
 
 async function renderAt(path: string) {
@@ -142,6 +144,74 @@ beforeEach(() => {
   supabase.getSession.mockResolvedValue({ data: { session: null }, error: null });
   supabase.getUser.mockResolvedValue({ data: { user: null }, error: null });
   supabase.exchangeCodeForSession.mockReset();
+  supabase.verifyOtp.mockReset();
+});
+
+describe("auth email action prefetch barrier", () => {
+  async function renderAction(search: string, onContinue = vi.fn()) {
+    window.history.replaceState({}, "", `/auth/action${search}`);
+    const rootRoute = createRootRoute({ component: Outlet });
+    const actionRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/auth/action",
+      component: () => <AuthAction search={search} onContinue={onContinue} />,
+    });
+    const router = new (await import("@tanstack/react-router")).Router({
+      routeTree: rootRoute.addChildren([actionRoute]),
+      history: createMemoryHistory({ initialEntries: [`/auth/action${search}`] }),
+    });
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(router.state.status).toBe("idle"));
+    return onContinue;
+  }
+
+  it.each([
+    ["signup", "signup", "Confirmar meu e-mail"],
+    ["recovery", "recovery", "Redefinir minha senha"],
+    ["email-change", "email_change", "Confirmar alteração de e-mail"],
+  ])("does not consume %s tokens while rendering", async (kind, type, heading) => {
+    await renderAction(`?kind=${kind}&token_hash=apparent-valid-token&type=${type}`);
+
+    expect(screen.getByRole("heading", { name: heading })).toBeTruthy();
+    expect(supabase.verifyOtp).not.toHaveBeenCalled();
+    expect(supabase.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(supabase.getSession).not.toHaveBeenCalled();
+    expect(supabase.getUser).not.toHaveBeenCalled();
+    expect(auth.updatePassword).not.toHaveBeenCalled();
+    expect(auth.acceptCurrentLegalDocuments).not.toHaveBeenCalled();
+    expect(security.recoveryUserId).toBeNull();
+  });
+
+  it("forwards to the existing callback exactly once after an explicit click", async () => {
+    const onContinue = await renderAction(
+      "?kind=recovery&token_hash=hash%2Bwith%2Fcharacters&type=recovery",
+    );
+    const button = screen.getByRole("button", { name: "Continuar" });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(onContinue).toHaveBeenCalledOnce();
+    expect(onContinue).toHaveBeenCalledWith(
+      "/auth/confirm?kind=recovery&token_hash=hash%2Bwith%2Fcharacters&type=recovery",
+    );
+    expect(supabase.verifyOtp).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "?kind=signup&type=signup",
+    "?kind=signup&token_hash=hash",
+    "?kind=signup&token_hash=hash&type=magiclink",
+    "?kind=recovery&token_hash=hash&type=signup",
+  ])("rejects invalid or mismatched parameters without side effects: %s", async (search) => {
+    const onContinue = await renderAction(search);
+
+    expect(screen.getByRole("heading", { name: "Link inválido" })).toBeTruthy();
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(supabase.verifyOtp).not.toHaveBeenCalled();
+    expect(supabase.exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(auth.acceptCurrentLegalDocuments).not.toHaveBeenCalled();
+  });
 });
 
 describe("email confirmation reconciliation", () => {
