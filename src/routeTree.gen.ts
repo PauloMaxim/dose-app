@@ -24,6 +24,7 @@ import { Route as AppInsightsRouteImport } from './routes/_app/insights'
 import { Route as AppMascoteRouteImport } from './routes/_app/mascote'
 import { Route as AppPerfilRouteImport } from './routes/_app/perfil'
 import { Route as ArtigoIdRouteImport } from './routes/artigo.$id'
+import { Route as AuthActionRouteImport } from './routes/auth.action'
 import { Route as AuthConfirmRouteImport } from './routes/auth.confirm'
 import { Route as AuthReadyRouteImport } from './routes/auth.ready'
 import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-password'
@@ -106,6 +107,11 @@ const ArtigoIdRoute = ArtigoIdRouteImport.update({
   path: '/artigo/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthActionRoute = AuthActionRouteImport.update({
+  id: '/auth/action',
+  path: '/auth/action',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthConfirmRoute = AuthConfirmRouteImport.update({
   id: '/auth/confirm',
   path: '/auth/confirm',
@@ -157,6 +163,7 @@ export interface FileRoutesByFullPath {
   '/mascote': typeof AppMascoteRoute
   '/perfil': typeof AppPerfilRoute
   '/artigo/$id': typeof ArtigoIdRoute
+  '/auth/action': typeof AuthActionRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/auth/ready': typeof AuthReadyRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/mascote': typeof AppMascoteRoute
   '/perfil': typeof AppPerfilRoute
   '/artigo/$id': typeof ArtigoIdRoute
+  '/auth/action': typeof AuthActionRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/auth/ready': typeof AuthReadyRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
@@ -204,6 +212,7 @@ export interface FileRoutesById {
   '/_app/mascote': typeof AppMascoteRoute
   '/_app/perfil': typeof AppPerfilRoute
   '/artigo/$id': typeof ArtigoIdRoute
+  '/auth/action': typeof AuthActionRoute
   '/auth/confirm': typeof AuthConfirmRoute
   '/auth/ready': typeof AuthReadyRoute
   '/auth/reset-password': typeof AuthResetPasswordRoute
@@ -230,6 +239,7 @@ export interface FileRouteTypes {
     | '/mascote'
     | '/perfil'
     | '/artigo/$id'
+    | '/auth/action'
     | '/auth/confirm'
     | '/auth/ready'
     | '/auth/reset-password'
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
     | '/mascote'
     | '/perfil'
     | '/artigo/$id'
+    | '/auth/action'
     | '/auth/confirm'
     | '/auth/ready'
     | '/auth/reset-password'
@@ -276,6 +287,7 @@ export interface FileRouteTypes {
     | '/_app/mascote'
     | '/_app/perfil'
     | '/artigo/$id'
+    | '/auth/action'
     | '/auth/confirm'
     | '/auth/ready'
     | '/auth/reset-password'
@@ -296,6 +308,7 @@ export interface RootRouteChildren {
   PrivacidadeRoute: typeof PrivacidadeRoute
   TermosRoute: typeof TermosRoute
   ArtigoIdRoute: typeof ArtigoIdRoute
+  AuthActionRoute: typeof AuthActionRoute
   AuthConfirmRoute: typeof AuthConfirmRoute
   AuthReadyRoute: typeof AuthReadyRoute
   AuthResetPasswordRoute: typeof AuthResetPasswordRoute
@@ -412,6 +425,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ArtigoIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/action': {
+      id: '/auth/action'
+      path: '/auth/action'
+      fullPath: '/auth/action'
+      preLoaderRoute: typeof AuthActionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/confirm': {
       id: '/auth/confirm'
       path: '/auth/confirm'
@@ -494,6 +514,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadeRoute: PrivacidadeRoute,
   TermosRoute: TermosRoute,
   ArtigoIdRoute: ArtigoIdRoute,
+  AuthActionRoute: AuthActionRoute,
   AuthConfirmRoute: AuthConfirmRoute,
   AuthReadyRoute: AuthReadyRoute,
   AuthResetPasswordRoute: AuthResetPasswordRoute,
