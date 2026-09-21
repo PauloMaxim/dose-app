@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { completeAccountDeletion, type AccountDeletionClientPort } from "./account-deletion.ts";
+import {
+  clearLocalDeviceCache,
+  completeAccountDeletion,
+  type AccountDeletionClientPort,
+} from "./account-deletion.ts";
 
 describe("account deletion client cleanup", () => {
   it("clears private state and storage before ending auth on a public route", async () => {
@@ -30,5 +34,18 @@ describe("account deletion client cleanup", () => {
       }),
     );
     assert.deepEqual(calls, []);
+  });
+
+  it("clears only local data without deleting the account or ending auth", async () => {
+    const calls: string[] = [];
+
+    await clearLocalDeviceCache({
+      clearPrivateState: () => void calls.push("reset"),
+      clearPrivateStorage: async () => void calls.push("storage"),
+    });
+
+    assert.deepEqual(calls, ["reset", "storage", "reset"]);
+    assert.equal(calls.includes("delete"), false);
+    assert.equal(calls.includes("auth"), false);
   });
 });

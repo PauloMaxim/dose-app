@@ -31,7 +31,7 @@ import {
   updateEmail,
 } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { completeAccountDeletion } from "@/lib/account-deletion";
+import { clearLocalDeviceCache, completeAccountDeletion } from "@/lib/account-deletion";
 import { useT } from "@/lib/i18n";
 import { planName } from "@/lib/plans";
 import { playSound } from "@/lib/sound";
@@ -115,11 +115,12 @@ function ConfigPage() {
   }
 
   async function clearLocalCache() {
-    resetDemo();
     try {
-      await useDose.persist.clearStorage();
+      await clearLocalDeviceCache({
+        clearPrivateState: resetDemo,
+        clearPrivateStorage: async () => useDose.persist.clearStorage(),
+      });
     } finally {
-      resetDemo();
       setFormMsg("Cache local limpo. Sua conta e sessão continuam ativas.");
     }
   }
@@ -658,6 +659,10 @@ function ConfigPage() {
       <AccountDeletionDialog
         open={confirmDel}
         onCancel={() => setConfirmDel(false)}
+        onReauthenticate={async (password) => {
+          const { error } = await reauthenticatePassword(password);
+          return !error;
+        }}
         onDelete={deleteAccount}
       />
     </div>

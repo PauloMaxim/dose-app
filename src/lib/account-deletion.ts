@@ -21,3 +21,16 @@ export async function completeAccountDeletion(port: AccountDeletionClientPort): 
   }
   await port.clearAuthAndRedirect("/login");
 }
+
+/** Clears only Dose-owned device data; it deliberately has no remote account/auth dependency. */
+export async function clearLocalDeviceCache(port: {
+  clearPrivateState: () => void;
+  clearPrivateStorage: () => Promise<void>;
+}): Promise<void> {
+  port.clearPrivateState();
+  try {
+    await port.clearPrivateStorage();
+  } finally {
+    port.clearPrivateState();
+  }
+}

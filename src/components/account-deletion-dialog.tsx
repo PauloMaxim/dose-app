@@ -5,10 +5,17 @@ import { Button } from "@/components/ui/button";
 type AccountDeletionDialogProps = {
   open: boolean;
   onCancel: () => void;
+  onReauthenticate: (password: string) => Promise<boolean>;
   onDelete: () => Promise<void>;
 };
 
-export function AccountDeletionDialog({ open, onCancel, onDelete }: AccountDeletionDialogProps) {
+export function AccountDeletionDialog({
+  open,
+  onCancel,
+  onReauthenticate,
+  onDelete,
+}: AccountDeletionDialogProps) {
+  const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -27,6 +34,13 @@ export function AccountDeletionDialog({ open, onCancel, onDelete }: AccountDelet
     setSubmitting(true);
     setError("");
     try {
+      const passwordMatches = await onReauthenticate(password);
+      if (!passwordMatches) {
+        setError("A senha atual não confere. A conta não foi excluída.");
+        submissionInFlight.current = false;
+        setSubmitting(false);
+        return;
+      }
       await onDelete();
     } catch {
       setError("Não foi possível excluir sua conta agora. Tente novamente.");
@@ -37,6 +51,7 @@ export function AccountDeletionDialog({ open, onCancel, onDelete }: AccountDelet
 
   function cancel() {
     if (submissionInFlight.current) return;
+    setPassword("");
     setConfirmation("");
     setError("");
     onCancel();
@@ -72,13 +87,25 @@ export function AccountDeletionDialog({ open, onCancel, onDelete }: AccountDelet
           </div>
         </div>
 
-        <label htmlFor="account-deletion-confirmation" className="mt-5 block text-sm font-medium">
+        <label htmlFor="account-deletion-password" className="mt-5 block text-sm font-medium">
+          Senha atual
+        </label>
+        <input
+          id="account-deletion-password"
+          type="password"
+          autoComplete="current-password"
+          autoFocus
+          value={password}
+          disabled={submitting}
+          onChange={(event) => setPassword(event.target.value)}
+          className="mt-2 h-11 w-full rounded-full bg-elevated px-4 text-sm outline-none ring-danger focus:ring-2"
+        />
+        <label htmlFor="account-deletion-confirmation" className="mt-4 block text-sm font-medium">
           Digite EXCLUIR para continuar
         </label>
         <input
           id="account-deletion-confirmation"
           autoComplete="off"
-          autoFocus
           value={confirmation}
           disabled={submitting}
           onChange={(event) => setConfirmation(event.target.value)}
@@ -93,7 +120,7 @@ export function AccountDeletionDialog({ open, onCancel, onDelete }: AccountDelet
         <Button
           size="lg"
           className="mt-5 w-full bg-danger text-on-accent"
-          disabled={submitting || confirmation !== "EXCLUIR"}
+          disabled={submitting || !password || confirmation !== "EXCLUIR"}
           onClick={() => void confirmDeletion()}
         >
           {submitting ? "Excluindo…" : "Excluir minha conta"}
