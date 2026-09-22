@@ -16,13 +16,6 @@ const studyLabels: Record<ScientificFeedPresentation["studyType"], string> = {
   other: "Outro",
 };
 
-const evidenceLabels: Record<ScientificFeedPresentation["evidenceLevel"], string> = {
-  high: "Evidência alta",
-  moderate: "Evidência moderada",
-  low: "Evidência baixa",
-  very_low: "Evidência muito baixa",
-};
-
 export function ScientificFeedCard({
   item,
   compact = false,
@@ -36,9 +29,6 @@ export function ScientificFeedCard({
     <article className="rounded-2xl bg-card p-4">
       <div className="flex flex-wrap gap-2 text-[11px] font-medium text-muted">
         <span className="rounded-full bg-card-2 px-2.5 py-1">{studyLabels[item.studyType]}</span>
-        <span className="rounded-full bg-card-2 px-2.5 py-1">
-          {evidenceLabels[item.evidenceLevel]}
-        </span>
       </div>
       <h3 className="mt-3 text-[17px] font-semibold leading-snug tracking-tight">{item.title}</h3>
       {item.authors.length > 0 && (

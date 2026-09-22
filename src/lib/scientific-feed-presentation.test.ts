@@ -117,6 +117,7 @@ test("presentation preserves scientific metadata, provenance and personalized re
 
 test("presentation does not synthesize editorial or summary fields", () => {
   const presented = presentScientificFeedItem(rankedItem);
+  assert.equal("evidenceLevel" in presented, false);
   for (const fabricatedField of [
     "synopsis",
     "practice",

@@ -1,4 +1,4 @@
-import type { EvidenceLevel, StudyType } from "@/server/scientific/classification";
+import type { StudyType } from "@/server/scientific/classification";
 import type { RankedFeedItem } from "@/server/scientific/feed";
 
 export interface ScientificFeedPresentation {
@@ -15,7 +15,6 @@ export interface ScientificFeedPresentation {
   abstract: string | null;
   sourceLinks: Array<{ label: string; url: string }>;
   studyType: StudyType;
-  evidenceLevel: EvidenceLevel;
   matchedTopics: Array<{ topicId: string; specialtyId: string | null; confidence: number }>;
   relevance: {
     score: number;
@@ -65,7 +64,6 @@ export function presentScientificFeedItem(item: RankedFeedItem): ScientificFeedP
       (link, index) => links.findIndex((candidate) => candidate.url === link.url) === index,
     ),
     studyType: item.classification.studyType,
-    evidenceLevel: item.classification.evidenceLevel,
     matchedTopics: item.matchedTopics.map((topic) => ({
       topicId: topic.topicId,
       specialtyId: topic.specialtyId,

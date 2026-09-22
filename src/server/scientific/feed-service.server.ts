@@ -3,13 +3,31 @@ import { getSupabaseUserClient } from "../db/supabase.server";
 import { buildScientificFeed, type FeedArticle } from "./feed";
 import type { ScientificFeedInput } from "./feed-service";
 
+export const SCIENTIFIC_SOURCE_PROVIDERS = ["pubmed", "europe_pmc", "crossref"] as const;
+
+export function scientificCatalogRows<T extends { id: string }>(
+  catalogRows: readonly T[],
+  sourceRows: readonly { article_id: string; provider: string }[],
+): T[] {
+  const eligibleIds = new Set(
+    sourceRows
+      .filter((source) =>
+        SCIENTIFIC_SOURCE_PROVIDERS.includes(
+          source.provider as (typeof SCIENTIFIC_SOURCE_PROVIDERS)[number],
+        ),
+      )
+      .map((source) => source.article_id),
+  );
+  return catalogRows.filter((article) => eligibleIds.has(article.id));
+}
+
 /** Production boundary: identity and all trusted ranking inputs come from the authenticated session. */
 export async function readScientificFeedForAuthenticatedUser(
   input: ScientificFeedInput,
   context: { accessToken: string; userId: string },
 ) {
   const client = getSupabaseUserClient(context.accessToken);
-  const [interests, saved, progress, catalog, specialties, topics] = await Promise.all([
+  const [interests, saved, progress, catalog, sources, specialties, topics] = await Promise.all([
     client.from("user_interests").select("specialty_id,topic_id").eq("user_id", context.userId),
     client.from("saved_articles").select("article_id").eq("user_id", context.userId),
     client
@@ -22,10 +40,14 @@ export async function readScientificFeedForAuthenticatedUser(
       .select(
         "id,title,abstract,authors,journal,publisher,published_at,doi,pmid,pmcid,language,publication_types,volume,issue,pages,original_url,pubmed_url,pmc_url,doi_url,keywords,mesh_terms,ingested_at,updated_at,article_topics!inner(topic_id,confidence,association_type,method,evidence,rule_version,topics!inner(specialty_id,is_active))",
       ),
+    client
+      .from("article_sources")
+      .select("article_id,provider")
+      .in("provider", [...SCIENTIFIC_SOURCE_PROVIDERS]),
     client.from("specialties").select("id").eq("is_active", true),
     client.from("topics").select("id,specialty_id").eq("is_active", true),
   ]);
-  for (const result of [interests, saved, progress, catalog, specialties, topics])
+  for (const result of [interests, saved, progress, catalog, sources, specialties, topics])
     if (result.error) throw new Error("Não foi possível construir o feed científico.");
   const rows = (interests.data ?? []) as any[];
   const activeSpecialties = new Set((specialties.data ?? []).map((x) => x.id));
@@ -36,42 +58,44 @@ export async function readScientificFeedForAuthenticatedUser(
       .map((x) => x.specialty_id),
     topicIds: rows.filter((x) => x.topic_id && activeTopics.has(x.topic_id)).map((x) => x.topic_id),
   };
-  const articles = (catalog.data ?? []).map((row: any): FeedArticle => ({
-    id: row.id,
-    title: row.title,
-    abstract: row.abstract,
-    authors: row.authors ?? [],
-    journal: row.journal,
-    publisher: row.publisher,
-    publishedAt: row.published_at,
-    doi: row.doi,
-    pmid: row.pmid,
-    pmcid: row.pmcid,
-    language: row.language,
-    publicationTypes: row.publication_types ?? [],
-    volume: row.volume,
-    issue: row.issue,
-    pages: row.pages,
-    keywords: row.keywords ?? [],
-    meshTerms: row.mesh_terms ?? [],
-    ingestedAt: row.ingested_at,
-    updatedAt: row.updated_at,
-    originalUrl: row.original_url,
-    pubmedUrl: row.pubmed_url,
-    pmcUrl: row.pmc_url,
-    doiUrl: row.doi_url,
-    topics: row.article_topics
-      .filter((x: any) => x.topics?.is_active)
-      .map((x: any) => ({
-        topicId: x.topic_id,
-        specialtyId: x.topics.specialty_id,
-        confidence: Number(x.confidence ?? 1),
-        associationType: x.association_type,
-        method: x.method ?? "editorial",
-        ruleVersion: x.rule_version ?? "editorial",
-        evidence: x.evidence ?? [],
-      })),
-  }));
+  const articles = scientificCatalogRows(catalog.data ?? [], sources.data ?? []).map(
+    (row: any): FeedArticle => ({
+      id: row.id,
+      title: row.title,
+      abstract: row.abstract,
+      authors: row.authors ?? [],
+      journal: row.journal,
+      publisher: row.publisher,
+      publishedAt: row.published_at,
+      doi: row.doi,
+      pmid: row.pmid,
+      pmcid: row.pmcid,
+      language: row.language,
+      publicationTypes: row.publication_types ?? [],
+      volume: row.volume,
+      issue: row.issue,
+      pages: row.pages,
+      keywords: row.keywords ?? [],
+      meshTerms: row.mesh_terms ?? [],
+      ingestedAt: row.ingested_at,
+      updatedAt: row.updated_at,
+      originalUrl: row.original_url,
+      pubmedUrl: row.pubmed_url,
+      pmcUrl: row.pmc_url,
+      doiUrl: row.doi_url,
+      topics: row.article_topics
+        .filter((x: any) => x.topics?.is_active)
+        .map((x: any) => ({
+          topicId: x.topic_id,
+          specialtyId: x.topics.specialty_id,
+          confidence: Number(x.confidence ?? 1),
+          associationType: x.association_type,
+          method: x.method ?? "editorial",
+          ruleVersion: x.rule_version ?? "editorial",
+          evidence: x.evidence ?? [],
+        })),
+    }),
+  );
   return buildScientificFeed(
     articles,
     preferences,
