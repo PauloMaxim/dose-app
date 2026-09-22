@@ -71,7 +71,7 @@ export interface PilotDependencies {
     dateFrom: string;
     dateTo: string;
   }): Promise<ScientificArticle[]>;
-  persist(articles: ScientificArticle[]): Promise<{
+  persist(articles: ScientificArticle[], operationKey?: string): Promise<{
     found: number;
     new: number;
     updated: number;
@@ -161,7 +161,7 @@ export async function handleScientificPilotRequest(
       dateTo: parsed.data.dateTo,
     });
     const unique = deduplicateArticles(discovered);
-    const persisted = await dependencies.persist(unique);
+    const persisted = await dependencies.persist(unique, parsed.data.operationKey);
     const report: PilotReport = {
       operationKey: parsed.data.operationKey,
       providers: ["pubmed"],
@@ -245,6 +245,6 @@ export function createScientificPilotDependencies(
     ...configuration,
     operations: createSupabasePilotOperationStore(client),
     discover: (options) => adapter.discover({ ...options, sources: ["pubmed"] }),
-    persist: (articles) => ingestScientificBatch(client, articles),
+    persist: (articles, operationKey) => ingestScientificBatch(client, articles, { operationKey }),
   };
 }

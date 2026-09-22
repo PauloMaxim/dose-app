@@ -4,7 +4,10 @@ import { CrossrefAdapter } from "./adapters/crossref.server";
 import { EuropePmcAdapter } from "./adapters/europe-pmc.server";
 import { PubMedAdapter } from "./adapters/pubmed.server";
 import { deduplicateArticles } from "./merge";
-import { persistScientificArticle } from "./persistence.server";
+import {
+  persistScientificArticle,
+  type ScientificPersistenceObservability,
+} from "./persistence.server";
 import type {
   DiscoveryOptions,
   ScientificAdapter,
@@ -49,6 +52,7 @@ export async function ingestScientificArticle(client: SupabaseClient, article: S
 export async function ingestScientificBatch(
   client: SupabaseClient,
   articles: ScientificArticle[],
+  observability: ScientificPersistenceObservability = {},
 ): Promise<IngestionStats> {
   const unique = deduplicateArticles(articles);
   const stats: IngestionStats = {
@@ -61,7 +65,7 @@ export async function ingestScientificBatch(
   };
   for (const article of unique) {
     try {
-      const outcome = await persistScientificArticle(client, article);
+      const outcome = await persistScientificArticle(client, article, observability);
       stats[outcome]++;
     } catch (error) {
       stats.failed++;

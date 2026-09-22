@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { parseCrossref } from "./adapters/crossref.server";
 import { parseEuropePmc } from "./adapters/europe-pmc.server";
@@ -7,7 +8,11 @@ import { fetchScientific, ScientificHttpError } from "./http";
 import { articleIdentity, bibliographicFallback, normalizeDoi } from "./identity";
 import { deduplicateArticles, mergeArticles, promoteLegacyArticle } from "./merge";
 import { emptyArticle } from "./parse-utils";
-import { persistScientificArticle } from "./persistence.server";
+import {
+  persistScientificArticle,
+  type ScientificPersistenceErrorEvent,
+  type ScientificPersistenceStage,
+} from "./persistence.server";
 import type { ScientificArticle } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -158,6 +163,163 @@ function persistedArticleRow(values: Record<string, any> = {}) {
     ...values,
   };
 }
+
+function failingPersistenceClient(stage: ScientificPersistenceStage) {
+  const row = persistedArticleRow();
+  const mustUpdate = stage === "source_history_lookup" || stage === "article_update";
+  const databaseError = {
+    code: "23505",
+    message: "Authorization Bearer secret-token",
+    details: "SCIENTIFIC_INGESTION_TOKEN SUPABASE_SERVICE_ROLE_KEY service-role-secret",
+    hint: "A sufficiently long exact biomedical study title",
+    abstract: "private abstract",
+    payload: { full: "private payload" },
+  };
+
+  class Query {
+    private operation = "select";
+
+    constructor(private table: string) {}
+
+    select() {
+      return this;
+    }
+    eq() {
+      return this;
+    }
+    or() {
+      return this;
+    }
+    limit() {
+      return this;
+    }
+    insert() {
+      this.operation = "insert";
+      return this;
+    }
+    update() {
+      this.operation = "update";
+      return this;
+    }
+    upsert() {
+      this.operation = "upsert";
+      return this;
+    }
+    maybeSingle() {
+      if (this.table === "article_sources") {
+        if (stage === "source_lookup") return Promise.resolve({ data: null, error: databaseError });
+        return Promise.resolve({
+          data: mustUpdate ? { article_id: row.id } : null,
+          error: null,
+        });
+      }
+      if (stage === "identity_lookup")
+        return Promise.resolve({ data: null, error: databaseError });
+      return Promise.resolve({ data: null, error: null });
+    }
+    single() {
+      if (this.operation === "update")
+        return Promise.resolve({
+          data: stage === "article_update" ? null : { id: row.id },
+          error: stage === "article_update" ? databaseError : null,
+        });
+      if (this.operation === "insert")
+        return Promise.resolve({
+          data: stage === "article_insert" ? null : { id: row.id },
+          error: stage === "article_insert" ? databaseError : null,
+        });
+      return Promise.resolve({ data: row, error: null });
+    }
+    then(resolve: (value: any) => void) {
+      if (this.operation === "upsert")
+        return Promise.resolve({
+          data: null,
+          error: stage === "source_upsert" ? databaseError : null,
+        }).then(resolve);
+      return Promise.resolve({
+        data: [{ provider: "pubmed" }],
+        error: stage === "source_history_lookup" ? databaseError : null,
+      }).then(resolve);
+    }
+  }
+
+  return {
+    client: { from: (table: string) => new Query(table) } as unknown as SupabaseClient,
+    databaseError,
+  };
+}
+
+const observableFailureStages: ScientificPersistenceStage[] = [
+  "source_lookup",
+  "identity_lookup",
+  "source_history_lookup",
+  "article_insert",
+  "article_update",
+  "source_upsert",
+];
+
+for (const stage of observableFailureStages) {
+  test(`persistence logs only safe fields for ${stage} failures`, async () => {
+    const incoming = article("pubmed", "sensitive-external-id", {
+      title: "A confidential full article title that must not be logged",
+      abstract: "A confidential abstract that must not be logged",
+    });
+    const { client, databaseError } = failingPersistenceClient(stage);
+    const events: ScientificPersistenceErrorEvent[] = [];
+
+    await assert.rejects(
+      persistScientificArticle(client, incoming, {
+        operationKey: "pilot_hf_rct_20260922_001",
+        log: (event) => events.push(event),
+      }),
+      (error) => error === databaseError,
+    );
+
+    assert.deepEqual(events, [
+      {
+        event: "scientific_persistence_error",
+        stage,
+        error: { code: "23505" },
+        itemHash: createHash("sha256")
+          .update("pubmed:sensitive-external-id")
+          .digest("hex")
+          .slice(0, 16),
+        operationKey: "pilot_hf_rct_20260922_001",
+      },
+    ]);
+    const serialized = JSON.stringify(events);
+    for (const forbidden of [
+      "sensitive-external-id",
+      "secret-token",
+      "service-role-secret",
+      "SCIENTIFIC_INGESTION_TOKEN",
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "Authorization",
+      incoming.abstract,
+      incoming.title,
+      "private payload",
+      "message",
+      "details",
+      "hint",
+      "payload",
+    ])
+      assert.equal(serialized.includes(String(forbidden)), false, `logged forbidden ${forbidden}`);
+  });
+}
+
+test("successful persistence does not log a scientific persistence error", async () => {
+  const row = persistedArticleRow({ id: "new-article-id" });
+  const { client } = persistenceClient(row, []);
+  const events: ScientificPersistenceErrorEvent[] = [];
+
+  assert.equal(
+    await persistScientificArticle(client, article("pubmed", "success"), {
+      log: (event) => events.push(event),
+    }),
+    "new",
+  );
+  assert.deepEqual(events, []);
+});
 
 test("normalizes DOI URL, doi prefix, case and whitespace", () =>
   assert.equal(normalizeDoi(" DOI: HTTPS://DOI.ORG/10.1000/ABC "), "10.1000/abc"));
