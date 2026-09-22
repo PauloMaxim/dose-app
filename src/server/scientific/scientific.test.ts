@@ -5,9 +5,11 @@ import { parseEuropePmc } from "./adapters/europe-pmc.server";
 import { parsePubMedXml } from "./adapters/pubmed.server";
 import { fetchScientific, ScientificHttpError } from "./http";
 import { articleIdentity, bibliographicFallback, normalizeDoi } from "./identity";
-import { deduplicateArticles, mergeArticles } from "./merge";
+import { deduplicateArticles, mergeArticles, promoteLegacyArticle } from "./merge";
 import { emptyArticle } from "./parse-utils";
+import { persistScientificArticle } from "./persistence.server";
 import type { ScientificArticle } from "./types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const article = (
   source: "pubmed" | "europe_pmc" | "crossref",
@@ -76,6 +78,162 @@ test("deduplication is idempotent across repeated ingestion input", () => {
   const input = [article("pubmed", "1", { pmid: "1" }), article("europe_pmc", "1", { pmid: "1" })];
   const once = deduplicateArticles(input);
   assert.deepEqual(deduplicateArticles([...once, ...input]), once);
+});
+
+test("legacy promotion uses incoming scientific metadata and preserves non-conflicting identifiers", () => {
+  const legacy = article("pubmed", "legacy", {
+    title: "O inimigo agora é a inércia",
+    abstract: "Editorial abstract",
+    journal: "Editorial journal",
+    publisher: "Editorial publisher",
+    doi: "10.1234/known",
+    pmid: "37952131",
+    pmcid: "PMC123",
+    keywords: ["editorial"],
+    publicationTypes: ["Editorial"],
+  });
+  const incoming = article("pubmed", "37952131", {
+    title: "Canonical scientific title",
+    abstract: null,
+    journal: "Scientific Journal",
+    publisher: null,
+    doi: null,
+    pmid: "37952131",
+    pmcid: null,
+    keywords: [],
+    publicationTypes: ["Randomized Controlled Trial"],
+  });
+
+  const promoted = promoteLegacyArticle(legacy, incoming);
+  assert.equal(promoted.title, "Canonical scientific title");
+  assert.equal(promoted.abstract, null);
+  assert.equal(promoted.publisher, null);
+  assert.deepEqual(promoted.keywords, []);
+  assert.equal(promoted.doi, "10.1234/known");
+  assert.equal(promoted.pmid, "37952131");
+  assert.equal(promoted.pmcid, "PMC123");
+});
+
+test("legacy promotion fails safely on conflicting identifiers", () => {
+  assert.throws(
+    () =>
+      promoteLegacyArticle(
+        article("pubmed", "legacy", { pmid: "1" }),
+        article("pubmed", "incoming", { pmid: "2" }),
+      ),
+    /Conflicting PMID/,
+  );
+});
+
+test("persistence promotes a dose_catalog PMID match once and retains provenance", async () => {
+  const id = "d05e0000-0000-4000-8000-000000000003";
+  const row: Record<string, any> = {
+    id,
+    title: "O inimigo agora é a inércia",
+    abstract: "Editorial fallback must disappear",
+    authors: [],
+    journal: "Editorial journal",
+    publisher: "Editorial publisher",
+    published_at: "2023-11-11",
+    doi: "10.1234/known",
+    pmid: "37952131",
+    pmcid: "PMC123",
+    language: "por",
+    publication_types: ["Editorial"],
+    volume: "legacy volume",
+    issue: "legacy issue",
+    pages: "legacy pages",
+    original_url: "https://dose.test/editorial",
+    pubmed_url: null,
+    pmc_url: null,
+    doi_url: "https://doi.org/10.1234/known",
+    keywords: ["editorial"],
+    mesh_terms: ["legacy"],
+    ingested_at: null,
+    updated_at: "2026-01-01T00:00:00.000Z",
+  };
+  const sources = new Map([
+    ["dose_catalog:select", { article_id: id, provider: "dose_catalog", external_id: "select" }],
+  ]);
+
+  class Query {
+    private filters: Record<string, unknown> = {};
+    private operation = "select";
+    private payload: any;
+    constructor(private table: string) {}
+    select() {
+      return this;
+    }
+    update(payload: any) {
+      this.operation = "update";
+      this.payload = payload;
+      return this;
+    }
+    upsert(payload: any) {
+      this.operation = "upsert";
+      this.payload = payload;
+      return this;
+    }
+    eq(column: string, value: unknown) {
+      this.filters[column] = value;
+      return this;
+    }
+    or() {
+      return this;
+    }
+    limit() {
+      return this;
+    }
+    maybeSingle() {
+      if (this.table === "articles") return Promise.resolve({ data: row, error: null });
+      const key = `${this.filters.provider}:${this.filters.external_id}`;
+      return Promise.resolve({ data: sources.get(key) ?? null, error: null });
+    }
+    single() {
+      if (this.operation === "update") Object.assign(row, this.payload);
+      return Promise.resolve({ data: this.table === "articles" ? row : null, error: null });
+    }
+    then(resolve: (value: any) => void) {
+      if (this.operation === "upsert") {
+        sources.set(`${this.payload.provider}:${this.payload.external_id}`, this.payload);
+        return Promise.resolve({ data: null, error: null }).then(resolve);
+      }
+      const data = [...sources.values()].filter(
+        (source) => source.article_id === this.filters.article_id,
+      );
+      return Promise.resolve({ data, error: null }).then(resolve);
+    }
+  }
+  const client = { from: (table: string) => new Query(table) } as unknown as SupabaseClient;
+  const incoming = article("pubmed", "37952131", {
+    title: "Canonical scientific title",
+    abstract: null,
+    journal: "Scientific Journal",
+    publisher: null,
+    pmid: "37952131",
+    doi: null,
+    pmcid: null,
+    publicationTypes: ["Randomized Controlled Trial"],
+    keywords: [],
+    meshTerms: [],
+  });
+
+  assert.equal(await persistScientificArticle(client, incoming), "reconciled");
+  assert.equal(row.id, id);
+  assert.equal(row.title, "Canonical scientific title");
+  assert.equal(row.abstract, null);
+  assert.equal(row.publisher, null);
+  assert.equal(row.doi, "10.1234/known");
+  assert.equal(row.pmcid, "PMC123");
+  assert.equal(row.study_type, "randomized_trial");
+  assert.deepEqual([...sources.values()].map((source) => source.provider).sort(), [
+    "dose_catalog",
+    "pubmed",
+  ]);
+
+  assert.equal(await persistScientificArticle(client, incoming), "updated");
+  assert.equal(row.title, "Canonical scientific title");
+  assert.equal(sources.size, 2);
 });
 
 const pubmedXml = `<PubmedArticleSet><PubmedArticle><MedlineCitation><PMID>42</PMID><Article><ArticleTitle>Clinical trial title</ArticleTitle><Abstract><AbstractText>Reported abstract.</AbstractText></Abstract><AuthorList><Author><LastName>Silva</LastName><ForeName>Ana</ForeName></Author></AuthorList><Journal><Title>Medical Journal</Title><JournalIssue><Volume>2</Volume><Issue>3</Issue><PubDate><Year>2024</Year></PubDate></JournalIssue></Journal><Language>eng</Language><PublicationTypeList><PublicationType>Clinical Trial</PublicationType></PublicationTypeList></Article><MeshHeadingList><MeshHeading><DescriptorName>Heart</DescriptorName></MeshHeading></MeshHeadingList></MedlineCitation><PubmedData><ArticleIdList><ArticleId IdType="doi">10.1234/Test</ArticleId><ArticleId IdType="pmc">PMC99</ArticleId></ArticleIdList></PubmedData></PubmedArticle></PubmedArticleSet>`;
