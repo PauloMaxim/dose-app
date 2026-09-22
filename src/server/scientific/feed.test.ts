@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyScientificArticle } from "./classification";
 import { buildScientificFeed, type FeedArticle } from "./feed";
+import { scientificCatalogRows } from "./feed-service.server";
 import { classifyArticleTopics, type TopicRule } from "./topics";
 import { emptyArticle } from "./parse-utils";
 const rule: TopicRule = {
@@ -120,6 +121,36 @@ test("missing abstract is feed eligible but separately not summary eligible", ()
   ).items[0];
   assert.equal(x.feedEligible, true);
   assert.equal(x.summaryEligible, false);
+});
+test("scientific feed boundary excludes dose_catalog-only rows without demo fallback", () => {
+  const catalog = [{ id: "demo" }, { id: "real" }, { id: "mixed" }];
+  const eligible = scientificCatalogRows(catalog, [
+    { article_id: "demo", provider: "dose_catalog" },
+    { article_id: "real", provider: "pubmed" },
+    { article_id: "mixed", provider: "dose_catalog" },
+    { article_id: "mixed", provider: "crossref" },
+  ]);
+
+  assert.deepEqual(
+    eligible.map((article) => article.id),
+    ["real", "mixed"],
+  );
+  assert.equal(
+    eligible.some((article) => article.id === "demo"),
+    false,
+  );
+  assert.deepEqual(scientificCatalogRows(catalog, []), []);
+
+  const feed = buildScientificFeed(
+    eligible.map((article) => classified(article.id)),
+    { specialtyIds: ["cardio"], topicIds: [] },
+    {},
+    { asOf: "2026-09-18" },
+  );
+  assert.deepEqual(
+    feed.items.map((item) => item.article.id),
+    ["mixed", "real"],
+  );
 });
 test("recent and classics are separate", () => {
   const xs = [classified("new"), classified("old", "cardio", "2020-01-01")],
@@ -252,10 +283,12 @@ test("schema and reconciler preserve editorial and make automatic associations i
 
 test("production feed is session-bound and contains no AI integration", async () => {
   const { readFile } = await import("node:fs/promises");
+  const boundary = await readFile("src/server/scientific/feed-service.ts", "utf8");
   const service = await readFile("src/server/scientific/feed-service.server.ts", "utf8");
-  assert.match(service, /authMiddleware/);
+  assert.match(boundary, /authMiddleware/);
+  assert.match(boundary, /readScientificFeedForAuthenticatedUser\(data, context\)/);
   assert.match(service, /context\.userId/);
-  assert.doesNotMatch(service, /userId.*input/);
+  assert.doesNotMatch(`${boundary}\n${service}`, /userId.*input/);
   const implementation = await readFile("src/server/scientific/topics.ts", "utf8");
   assert.doesNotMatch(implementation, /openai|anthropic|embedding|vector/i);
 });
