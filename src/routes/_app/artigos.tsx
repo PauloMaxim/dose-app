@@ -1,20 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { ArticleRow, CatalogCard } from "@/components/article-card";
+import { ArticleRow } from "@/components/article-card";
+import { ScientificFeedCard, ScientificFeedStatus } from "@/components/scientific-feed";
 import { InsightView } from "@/components/insight-view";
 import { NoteComposer } from "@/components/note-composer";
 import { UnderlineTabs } from "@/components/segmented";
-import {
-  ARTICLES,
-  editionHasStudyType,
-  getArticle,
-  getEditions,
-} from "@/lib/content";
+import { ARTICLES, getArticle } from "@/lib/content";
 import { matchQuery } from "@/lib/search";
-import { isSaved, prioritizeArticleIds, useDose } from "@/lib/store";
-import { parseIso } from "@/lib/utils";
-import type { StudyType } from "@/lib/types";
+import { isSaved, useDose } from "@/lib/store";
+import type { StudyType as ScientificStudyType } from "@/server/scientific/classification";
+import { useScientificFeed } from "@/lib/use-scientific-feed";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { authEnabled } from "@/lib/auth/client";
 import { persistNote } from "@/lib/user-content";
@@ -25,22 +21,20 @@ export const Route = createFileRoute("/_app/artigos")({
 
 type LibTab = "notas" | "meus" | "catalogo";
 
-const FILTERS: Array<"Todos" | StudyType> = [
-  "Todos",
-  "RCT",
-  "Guideline",
-  "Meta-análise",
-  "Review",
-  "Coorte",
+const FILTERS: Array<{ label: string; value: "all" | ScientificStudyType }> = [
+  { label: "Todos", value: "all" },
+  { label: "Ensaio randomizado", value: "randomized_trial" },
+  { label: "Diretriz", value: "guideline" },
+  { label: "Meta-análise", value: "meta_analysis" },
+  { label: "Revisão sistemática", value: "systematic_review" },
+  { label: "Coorte", value: "cohort" },
 ];
 
 function ArtigosPage() {
-  const tutorialOn = useDose(
-    (s) => s.profile.onboardingComplete && !s.profile.tutorialComplete,
-  );
+  const tutorialOn = useDose((s) => s.profile.onboardingComplete && !s.profile.tutorialComplete);
   const [tab, setTab] = useState<LibTab>(tutorialOn ? "catalogo" : "meus");
   const [q, setQ] = useState("");
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("Todos");
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["value"]>("all");
   const [folder, setFolder] = useState<string>("all");
   const [composer, setComposer] = useState(false);
   const saved = useDose((s) => s.saved);
@@ -48,9 +42,8 @@ function ArtigosPage() {
   const insights = useDose((s) => s.insights);
   const addInsight = useDose((s) => s.addInsight);
   const progress = useDose((s) => s.progress);
-  const specialty = useDose((s) => s.profile.specialty);
-  const topics = useDose((s) => s.profile.topics);
   const user = useCurrentUser();
+  const scientificFeed = useScientificFeed(50);
 
   const query = q.trim();
 
@@ -59,32 +52,31 @@ function ArtigosPage() {
     return ARTICLES.filter((a) => ids.has(a.id)).filter((a) => matchQuery(a, query));
   }, [saved, query]);
 
-  const ranked = useMemo(() => {
-    const order = prioritizeArticleIds(specialty, topics);
-    let list = [...ARTICLES].sort(
-      (a, b) => order.indexOf(a.id) - order.indexOf(b.id),
-    );
-    if (filter !== "Todos") list = list.filter((a) => a.studyType === filter);
-    if (query) list = list.filter((a) => matchQuery(a, query));
-    return list;
-  }, [specialty, topics, filter, query]);
+  const scientificItems = useMemo(() => {
+    if (scientificFeed.status !== "ready") return [];
+    const normalizedQuery = query.toLocaleLowerCase("pt-BR");
+    return scientificFeed.items.filter((item) => {
+      if (filter !== "all" && item.studyType !== filter) return false;
+      if (!normalizedQuery) return true;
+      return [
+        item.title,
+        item.abstract ?? "",
+        item.journal ?? "",
+        item.doi ?? "",
+        item.pmid ?? "",
+        item.pmcid ?? "",
+        ...item.authors,
+        ...item.publicationTypes,
+      ].some((value) => value.toLocaleLowerCase("pt-BR").includes(normalizedQuery));
+    });
+  }, [scientificFeed.status, scientificFeed.items, filter, query]);
 
   const filteredInsights = insights.filter((i) => {
     if (!query) return true;
     const art = getArticle(i.articleId);
     return (
-      i.text.toLowerCase().includes(query.toLowerCase()) ||
-      (art ? matchQuery(art, query) : false)
+      i.text.toLowerCase().includes(query.toLowerCase()) || (art ? matchQuery(art, query) : false)
     );
-  });
-
-  const editions = getEditions().filter((ed) => {
-    if (filter !== "Todos" && !editionHasStudyType(ed, filter)) return false;
-    if (!query) return true;
-    return ed.articleIds.some((id) => {
-      const a = getArticle(id);
-      return a ? matchQuery(a, query) : false;
-    });
   });
 
   const visibleMeus = meus.filter((a) => {
@@ -92,9 +84,7 @@ function ArtigosPage() {
     if (folder === "liked") {
       return saved.some((s) => s.articleId === a.id && s.liked);
     }
-    return saved.some(
-      (s) => s.articleId === a.id && s.collectionIds.includes(folder),
-    );
+    return saved.some((s) => s.articleId === a.id && s.collectionIds.includes(folder));
   });
 
   return (
@@ -122,27 +112,18 @@ function ArtigosPage() {
                 ? "Buscar nas notas…"
                 : tab === "meus"
                   ? "Buscar nos salvos…"
-                  : "AND · OR · NOT · PMID · tirzepatida"
+                  : "Título, autor, DOI, PMID ou termo do abstract"
             }
             className="h-full w-full bg-transparent text-sm text-fg outline-none placeholder:text-subtle"
           />
         </label>
-        {tab === "catalogo" && (
-          <p className="mt-2 px-1 text-[11px] text-subtle">
-            Operadores: AND, OR, NOT (ou E, OU, NÃO). Frase entre aspas. Ex.: tirzepatida AND HFpEF
-          </p>
-        )}
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-none px-5 pb-24 pt-5">
         {tab === "meus" && (
           <>
             <div className="mb-4 flex gap-2 overflow-x-auto scrollbar-none">
-              <FolderChip
-                label="Todos"
-                on={folder === "all"}
-                onClick={() => setFolder("all")}
-              />
+              <FolderChip label="Todos" on={folder === "all"} onClick={() => setFolder("all")} />
               <FolderChip
                 label="Gostei"
                 on={folder === "liked"}
@@ -184,64 +165,47 @@ function ArtigosPage() {
             <div className="mb-5 flex gap-2 overflow-x-auto scrollbar-none">
               {FILTERS.map((f) => (
                 <button
-                  key={f}
+                  key={f.value}
                   type="button"
-                  onClick={() => setFilter(f)}
+                  onClick={() => setFilter(f.value)}
                   className={
-                    f === filter
+                    f.value === filter
                       ? "h-8 shrink-0 rounded-full tab-gradient px-3 text-xs font-semibold text-on-accent"
                       : "h-8 shrink-0 rounded-full bg-card px-3 text-xs font-medium text-muted"
                   }
                 >
-                  {f}
+                  {f.label}
                 </button>
               ))}
             </div>
-            <div className="mb-8 flex items-end justify-between">
-              <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-fg">
-                Edições
+            <div className="mb-4">
+              <h2 className="text-[13px] font-semibold uppercase tracking-[0.14em]">
+                Literatura para você
               </h2>
-              <span className="text-xs text-muted">
-                {editions.length} · priorizado para {specialty}
-              </span>
+              <p className="mt-1 text-xs text-muted">
+                Ordenada por relevância personalizada, não por qualidade científica.
+              </p>
             </div>
-            {editions.map((ed) => (
-              <Link
-                key={ed.id}
-                to="/edicao/$id"
-                params={{ id: ed.id }}
-                search={{ from: "catalogo" }}
-                className="mb-8 block"
-              >
-                <div className="overflow-hidden rounded-2xl">
-                  <img
-                    src={ed.cover}
-                    alt=""
-                    className="aspect-[16/10] w-full object-cover"
-                    crossOrigin="anonymous"
+            <div className="space-y-3">
+              {scientificFeed.status === "loading" && <ScientificFeedStatus status="loading" />}
+              {scientificFeed.status === "error" && (
+                <ScientificFeedStatus status="error" onRetry={scientificFeed.retry} />
+              )}
+              {scientificFeed.status === "ready" && scientificFeed.items.length === 0 && (
+                <ScientificFeedStatus status="empty" />
+              )}
+              {scientificFeed.status === "ready" &&
+                scientificFeed.items.length > 0 &&
+                scientificItems.length === 0 && (
+                  <Empty
+                    title="Nenhum artigo corresponde à busca ou ao filtro"
+                    subtitle="Ajuste os termos ou selecione outro tipo de estudo."
                   />
-                </div>
-                <h3 className="mt-3 flex gap-2 text-[20px] font-semibold leading-snug">
-                  <span className="mt-1 size-2.5 shrink-0 rounded-full bg-teal" />
-                  {ed.title}
-                </h3>
-                <p className="mt-1 pl-4 text-sm text-muted">
-                  {parseIso(ed.id).toLocaleDateString("pt-BR", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                  {" · "}
-                  {ed.articleIds.length} itens
-                </p>
-              </Link>
-            ))}
-            <h2 className="mb-4 text-[13px] font-semibold uppercase tracking-[0.14em]">
-              Artigos · {specialty}
-            </h2>
-            {ranked.map((a) => (
-              <CatalogCard key={a.id} article={a} />
-            ))}
+                )}
+              {scientificItems.map((item) => (
+                <ScientificFeedCard key={item.id} item={item} />
+              ))}
+            </div>
           </div>
         )}
 
@@ -307,15 +271,7 @@ function ArtigosPage() {
   );
 }
 
-function FolderChip({
-  label,
-  on,
-  onClick,
-}: {
-  label: string
-  on: boolean
-  onClick: () => void
-}) {
+function FolderChip({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -337,10 +293,10 @@ function Empty({
   cta,
   onCta,
 }: {
-  title: string
-  subtitle?: string
-  cta?: string
-  onCta?: () => void
+  title: string;
+  subtitle?: string;
+  cta?: string;
+  onCta?: () => void;
 }) {
   return (
     <div className="flex min-h-[46vh] flex-col items-center justify-center px-6 text-center">

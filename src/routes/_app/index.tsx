@@ -4,9 +4,9 @@ import { GoalBar } from "@/components/goal-bar";
 import { Avatar } from "@/components/avatar";
 import { deriveMood, Mascot, mascotCopy, mascotName } from "@/components/mascot";
 import { StreakWeek } from "@/components/streak-week";
-import { Button } from "@/components/ui/button";
-import { editionMinutes, getTodayEdition } from "@/lib/content";
+import { ScientificFeedCard, ScientificFeedStatus } from "@/components/scientific-feed";
 import { isPremium } from "@/lib/premium";
+import { useScientificFeed } from "@/lib/use-scientific-feed";
 import {
   selectStreak,
   selectTodayLog,
@@ -14,7 +14,7 @@ import {
   todayGoalMet,
   useDose,
 } from "@/lib/store";
-import { formatMinutes, greetingForHour } from "@/lib/utils";
+import { greetingForHour } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/")({
   component: HomePage,
@@ -25,7 +25,7 @@ function HomePage() {
   const logs = useDose((s) => s.logs);
   const progress = useDose((s) => s.progress);
 
-  const edition = getTodayEdition();
+  const scientificFeed = useScientificFeed(5);
   const today = selectTodayLog(logs);
   const streak = selectStreak(logs);
   const weekMin = selectWeekMinutes(logs);
@@ -35,18 +35,6 @@ function HomePage() {
   const name = mascotName();
   const copy = mascotCopy(mood, name);
   const greet = greetingForHour(hour, profile.locale);
-  const unread = edition.articleIds.filter((id) => !progress[id]?.completed);
-  const totalMin = editionMinutes(edition);
-  const resumeId =
-    edition.articleIds.find(
-      (id) => (progress[id]?.scrollPct ?? 0) > 0 && !progress[id]?.completed,
-    ) ?? unread[0];
-  const midArticle = Boolean(
-    resumeId && (progress[resumeId]?.scrollPct ?? 0) > 0 && !progress[resumeId]?.completed,
-  );
-  const started = edition.articleIds.some(
-    (id) => progress[id]?.completed || (progress[id]?.scrollPct ?? 0) > 0,
-  );
   const finishedCount = Object.values(progress).filter((p) => p.completed).length;
 
   return (
@@ -90,70 +78,34 @@ function HomePage() {
         data-tour="tour-mascot"
         className="mt-4 flex items-center gap-3 rounded-2xl bg-card px-3 py-3"
       >
-        <Mascot
-          look={profile.look}
-          mood={mood}
-          streak={streak}
-          size={88}
-          fed={goalMet}
-        />
+        <Mascot look={profile.look} mood={mood} streak={streak} size={88} fed={goalMet} />
         <div className="min-w-0">
           <p className="text-[15px] font-semibold leading-snug">{copy.title}</p>
           <p className="mt-1 text-[13px] leading-relaxed text-muted">{copy.body}</p>
         </div>
       </Link>
 
-      <section
-        data-tour="tour-edition"
-        className="surface-gradient mt-4 rounded-[28px] px-5 py-6 shadow-card"
-      >
-        {unread.length === 0 ? (
-          <>
-            <h2 className="text-[28px] font-semibold leading-tight tracking-tight">
-              Edição de hoje concluída
-            </h2>
-            <p className="mt-2 text-[15px] text-on-accent/85">
-              {edition.title}. Volte amanhã para a próxima dose.
-            </p>
-            <Button asChild variant="white" size="lg" className="mt-5 w-full">
-              <Link to="/edicao/$id" params={{ id: edition.id }} search={{ from: "home" }}>
-                Rever a edição
-              </Link>
-            </Button>
-          </>
-        ) : (
-          <>
-            <p className="text-[13px] font-medium uppercase tracking-[0.16em] text-on-accent/75">
-              {edition.kicker}
-            </p>
-            <h2 className="mt-2 text-[28px] font-semibold leading-tight tracking-tight">
-              {midArticle
-                ? "Continuar de onde parou"
-                : started
-                  ? "Continuar a edição"
-                  : "Edição de hoje pronta"}
-            </h2>
-            <p className="mt-2 text-[15px] text-on-accent/85">
-              {edition.title} · {formatMinutes(totalMin)} · {edition.articleIds.length} itens
-              {midArticle && resumeId
-                ? ` · ${progress[resumeId]?.scrollPct ?? 0}%`
-                : started
-                  ? ` · ${edition.articleIds.length - unread.length}/${edition.articleIds.length} lidos`
-                  : ""}
-            </p>
-            <Button asChild variant="white" size="lg" className="mt-5 w-full">
-              {midArticle && resumeId ? (
-                <Link to="/ler/$id" params={{ id: resumeId }}>
-                  Continuar leitura
-                </Link>
-              ) : (
-                <Link to="/edicao/$id" params={{ id: edition.id }} search={{ from: "home" }}>
-                  {started ? "Continuar a edição" : "Ler a edição de hoje"}
-                </Link>
-              )}
-            </Button>
-          </>
-        )}
+      <section data-tour="tour-edition" className="mt-4" aria-labelledby="scientific-update-title">
+        <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted">Sua Dose</p>
+        <h2 id="scientific-update-title" className="mt-1 text-[26px] font-semibold tracking-tight">
+          Atualização científica
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted">
+          Literatura priorizada pela correspondência com seus interesses.
+        </p>
+        <div className="mt-4 space-y-3">
+          {scientificFeed.status === "loading" && <ScientificFeedStatus status="loading" />}
+          {scientificFeed.status === "error" && (
+            <ScientificFeedStatus status="error" onRetry={scientificFeed.retry} />
+          )}
+          {scientificFeed.status === "ready" && scientificFeed.items.length === 0 && (
+            <ScientificFeedStatus status="empty" />
+          )}
+          {scientificFeed.status === "ready" &&
+            scientificFeed.items.map((item) => (
+              <ScientificFeedCard key={item.id} item={item} compact />
+            ))}
+        </div>
       </section>
 
       <div className="mt-4 grid grid-cols-3 gap-2.5" data-tour="tour-stats">
@@ -172,16 +124,8 @@ function HomePage() {
       </div>
 
       <div className="mt-3 space-y-2.5" data-tour="tour-goals">
-        <GoalBar
-          label="Meta diária"
-          current={today?.minutes ?? 0}
-          goal={profile.dailyGoalMin}
-        />
-        <GoalBar
-          label="Meta semanal"
-          current={weekMin}
-          goal={profile.weeklyGoalMin}
-        />
+        <GoalBar label="Meta diária" current={today?.minutes ?? 0} goal={profile.dailyGoalMin} />
+        <GoalBar label="Meta semanal" current={weekMin} goal={profile.weeklyGoalMin} />
       </div>
     </main>
   );
@@ -193,10 +137,10 @@ function Stat({
   label,
   hint,
 }: {
-  icon: React.ReactNode
-  value: number
-  label: string
-  hint?: string
+  icon: React.ReactNode;
+  value: number;
+  label: string;
+  hint?: string;
 }) {
   return (
     <div className="rounded-2xl bg-card px-3 py-3">

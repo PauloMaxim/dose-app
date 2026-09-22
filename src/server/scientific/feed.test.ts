@@ -252,10 +252,12 @@ test("schema and reconciler preserve editorial and make automatic associations i
 
 test("production feed is session-bound and contains no AI integration", async () => {
   const { readFile } = await import("node:fs/promises");
+  const boundary = await readFile("src/server/scientific/feed-service.ts", "utf8");
   const service = await readFile("src/server/scientific/feed-service.server.ts", "utf8");
-  assert.match(service, /authMiddleware/);
+  assert.match(boundary, /authMiddleware/);
+  assert.match(boundary, /readScientificFeedForAuthenticatedUser\(data, context\)/);
   assert.match(service, /context\.userId/);
-  assert.doesNotMatch(service, /userId.*input/);
+  assert.doesNotMatch(`${boundary}\n${service}`, /userId.*input/);
   const implementation = await readFile("src/server/scientific/topics.ts", "utf8");
   assert.doesNotMatch(implementation, /openai|anthropic|embedding|vector/i);
 });
