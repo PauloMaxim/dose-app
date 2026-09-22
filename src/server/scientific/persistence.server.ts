@@ -2,10 +2,16 @@ import "./server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyScientificArticle } from "./classification";
 import { bibliographicFallback, normalizeDoi } from "./identity";
-import { mergeArticles } from "./merge";
-import type { ScientificArticle } from "./types";
+import { mergeArticles, promoteLegacyArticle } from "./merge";
+import type { ScientificArticle, ScientificSource } from "./types";
 
 export type PersistenceOutcome = "new" | "updated" | "reconciled";
+
+const scientificSources: ReadonlySet<string> = new Set<ScientificSource>([
+  "pubmed",
+  "europe_pmc",
+  "crossref",
+]);
 
 function databaseArticle(article: ScientificArticle) {
   const classification = classifyScientificArticle(article);
@@ -116,7 +122,18 @@ export async function persistScientificArticle(
   let articleId: string;
   let outcome: PersistenceOutcome;
   if (existing) {
-    const merged = mergeArticles(fromDatabase(existing, article), article);
+    const sources = await client
+      .from("article_sources")
+      .select("provider")
+      .eq("article_id", existing.id);
+    if (sources.error) throw sources.error;
+    const alreadyScientific = (sources.data ?? []).some(({ provider }) =>
+      scientificSources.has(provider),
+    );
+    const persisted = fromDatabase(existing, article);
+    const merged = alreadyScientific
+      ? mergeArticles(persisted, article)
+      : promoteLegacyArticle(persisted, article);
     const result = await client
       .from("articles")
       .update(databaseArticle(merged))

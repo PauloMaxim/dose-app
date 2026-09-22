@@ -53,6 +53,43 @@ export function mergeArticles(
   return merged;
 }
 
+function preserveIdentifier(
+  name: "DOI" | "PMID" | "PMCID",
+  existing: string | null,
+  incoming: string | null,
+): string | null {
+  if (existing && incoming && existing !== incoming) {
+    throw new Error(`Conflicting ${name} while promoting legacy scientific metadata`);
+  }
+  return incoming ?? existing;
+}
+
+/**
+ * Promotes the first real scientific record without treating legacy/editorial
+ * metadata as a fallback. Identifiers remain independent identity evidence.
+ */
+export function promoteLegacyArticle(
+  existing: ScientificArticle,
+  incoming: ScientificArticle,
+): ScientificArticle {
+  const existingDoi = normalizeDoi(existing.doi);
+  const incomingDoi = normalizeDoi(incoming.doi);
+  const doi = preserveIdentifier("DOI", existingDoi, incomingDoi);
+  const pmid = preserveIdentifier("PMID", existing.pmid, incoming.pmid);
+  const pmcid = preserveIdentifier(
+    "PMCID",
+    existing.pmcid?.toUpperCase() ?? null,
+    incoming.pmcid?.toUpperCase() ?? null,
+  );
+
+  return {
+    ...incoming,
+    doi,
+    pmid,
+    pmcid,
+  };
+}
+
 export function deduplicateArticles(input: ScientificArticle[]): ScientificArticle[] {
   const result = new Map<string, ScientificArticle>();
   // Multiple passes reconcile an identifier learned from a later source.
