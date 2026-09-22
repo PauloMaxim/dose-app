@@ -1,4 +1,5 @@
 import "./server-only";
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyScientificArticle } from "./classification";
 import { bibliographicFallback, normalizeDoi } from "./identity";
@@ -6,12 +7,75 @@ import { mergeArticles, promoteLegacyArticle } from "./merge";
 import type { ScientificArticle, ScientificSource } from "./types";
 
 export type PersistenceOutcome = "new" | "updated" | "reconciled";
+export type ScientificPersistenceStage =
+  | "source_lookup"
+  | "identity_lookup"
+  | "source_history_lookup"
+  | "article_insert"
+  | "article_update"
+  | "source_upsert";
+
+export interface ScientificPersistenceErrorEvent {
+  event: "scientific_persistence_error";
+  stage: ScientificPersistenceStage;
+  error: { code?: string };
+  itemHash: string;
+  operationKey?: string;
+}
+
+export interface ScientificPersistenceObservability {
+  operationKey?: string;
+  log?: (event: ScientificPersistenceErrorEvent) => void;
+}
 
 const scientificSources: ReadonlySet<string> = new Set<ScientificSource>([
   "pubmed",
   "europe_pmc",
   "crossref",
 ]);
+
+const safeDatabaseErrorCode = (error: unknown) => {
+  if (!error || typeof error !== "object" || !("code" in error)) return undefined;
+  const code = String(error.code).toUpperCase();
+  return /^(?:(?:0A|20|21|22|23|24|25|26|27|28|2B|2D|2F|34|38|39|3B|3D|3F|40|42|44|53|54|55|57|58|F0|HV|P0|XX)[0-9A-Z]{3}|PGRST[0-9]{3})$/.test(
+    code,
+  )
+    ? code
+    : undefined;
+};
+
+const persistenceItemHash = (article: ScientificArticle) => {
+  const provenance = article.provenance[0];
+  const identity = provenance ? `${provenance.source}:${provenance.externalId}` : "unknown";
+  return createHash("sha256").update(identity).digest("hex").slice(0, 16);
+};
+
+function reportPersistenceError(
+  article: ScientificArticle,
+  stage: ScientificPersistenceStage,
+  error: unknown,
+  observability: ScientificPersistenceObservability,
+) {
+  const code = safeDatabaseErrorCode(error);
+  const event: ScientificPersistenceErrorEvent = {
+    event: "scientific_persistence_error",
+    stage,
+    error: code ? { code } : {},
+    itemHash: persistenceItemHash(article),
+    ...(observability.operationKey ? { operationKey: observability.operationKey } : {}),
+  };
+  (observability.log ?? console.error)(event);
+}
+
+function throwPersistenceError(
+  article: ScientificArticle,
+  stage: ScientificPersistenceStage,
+  error: unknown,
+  observability: ScientificPersistenceObservability,
+): never {
+  reportPersistenceError(article, stage, error, observability);
+  throw error;
+}
 
 function databaseArticle(article: ScientificArticle) {
   const classification = classifyScientificArticle(article);
@@ -76,6 +140,7 @@ function fromDatabase(row: Record<string, any>, incoming: ScientificArticle): Sc
 export async function persistScientificArticle(
   client: SupabaseClient,
   article: ScientificArticle,
+  observability: ScientificPersistenceObservability = {},
 ): Promise<PersistenceOutcome> {
   const doi = normalizeDoi(article.doi);
   const fallback = bibliographicFallback(article);
@@ -96,14 +161,16 @@ export async function persistScientificArticle(
       .eq("provider", provenance.source)
       .eq("external_id", provenance.externalId)
       .maybeSingle();
-    if (source.error) throw source.error;
+    if (source.error)
+      throwPersistenceError(article, "source_lookup", source.error, observability);
     if (source.data?.article_id) {
       const found = await client
         .from("articles")
         .select("*")
         .eq("id", source.data.article_id)
         .single();
-      if (found.error) throw found.error;
+      if (found.error)
+        throwPersistenceError(article, "source_lookup", found.error, observability);
       existing = found.data;
       matchedSource = true;
       break;
@@ -116,7 +183,8 @@ export async function persistScientificArticle(
       .or(alternatives)
       .limit(1)
       .maybeSingle();
-    if (result.error) throw result.error;
+    if (result.error)
+      throwPersistenceError(article, "identity_lookup", result.error, observability);
     existing = result.data;
   }
   let articleId: string;
@@ -126,7 +194,8 @@ export async function persistScientificArticle(
       .from("article_sources")
       .select("provider")
       .eq("article_id", existing.id);
-    if (sources.error) throw sources.error;
+    if (sources.error)
+      throwPersistenceError(article, "source_history_lookup", sources.error, observability);
     const alreadyScientific = (sources.data ?? []).some(({ provider }) =>
       scientificSources.has(provider),
     );
@@ -140,7 +209,8 @@ export async function persistScientificArticle(
       .eq("id", existing.id)
       .select("id")
       .single();
-    if (result.error) throw result.error;
+    if (result.error)
+      throwPersistenceError(article, "article_update", result.error, observability);
     articleId = result.data.id;
     outcome = matchedSource ? "updated" : "reconciled";
   } else {
@@ -149,7 +219,8 @@ export async function persistScientificArticle(
       .insert(databaseArticle(article))
       .select("id")
       .single();
-    if (result.error) throw result.error;
+    if (result.error)
+      throwPersistenceError(article, "article_insert", result.error, observability);
     articleId = result.data.id;
     outcome = "new";
   }
@@ -168,7 +239,8 @@ export async function persistScientificArticle(
       },
       { onConflict: "provider,external_id" },
     );
-    if (result.error) throw result.error;
+    if (result.error)
+      throwPersistenceError(article, "source_upsert", result.error, observability);
   }
   return outcome;
 }

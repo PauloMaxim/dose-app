@@ -146,10 +146,12 @@ test("same operation replays safely and conflicting or concurrent requests do no
 
 test("pilot deduplicates before persistence and reports partial persistence without content", async () => {
   let persisted = 0;
+  let persistenceOperationKey: string | undefined;
   const deps = dependencies({
     discover: async () => [article("123", "10.1000/same"), article("456", "10.1000/same")],
-    persist: async (articles) => {
+    persist: async (articles, operationKey) => {
       persisted = articles.length;
+      persistenceOperationKey = operationKey;
       return {
         found: 1,
         new: 0,
@@ -163,6 +165,7 @@ test("pilot deduplicates before persistence and reports partial persistence with
   const response = await handleScientificPilotRequest(request(), deps);
   assert.equal(response.status, 200);
   assert.equal(persisted, 1);
+  assert.equal(persistenceOperationKey, KEY);
   assert.deepEqual(response.body.report?.errors, ["persistence_error"]);
   assert.equal(response.body.report?.discovered, 2);
   assert.equal(response.body.report?.deduplicated, 1);
