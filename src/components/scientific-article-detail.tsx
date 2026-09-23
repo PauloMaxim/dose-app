@@ -294,7 +294,10 @@ function SourceOriginal({
 
 function SourceOnlyArticle({ article }: { article: ScientificArticleDetail }) {
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto bg-bg scrollbar-none">
+    <main
+      className="scientific-article-detail min-h-0 min-w-0 flex-1 overflow-y-auto bg-bg scrollbar-none"
+      data-scientific-article-detail
+    >
       <article className="mx-auto max-w-3xl px-5 pb-14 pt-4 sm:px-8">
         <Link
           to="/artigos"

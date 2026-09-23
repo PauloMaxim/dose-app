@@ -95,6 +95,11 @@ describe("scientific article detail", () => {
     expect(screen.getByText(/Ainda não há resumo Dose/)).toBeTruthy();
     expect(container.querySelector("img")).toBeNull();
     expect(screen.queryByText(/Nível de evidência|1A|1B/)).toBeNull();
+    expect(
+      container
+        .querySelector("main.scientific-article-detail")
+        ?.hasAttribute("data-scientific-article-detail"),
+    ).toBe(true);
   });
 
   it("renders a DoseDocument as the primary reading experience and keeps the abstract secondary", () => {
@@ -120,7 +125,7 @@ describe("scientific article detail", () => {
       specialties: [],
     };
 
-    render(<ScientificArticleDetailView article={article} />);
+    const { container } = render(<ScientificArticleDetailView article={article} />);
     const headline = screen.getByRole("heading", { name: /Mitiperstat não melhorou sintomas/ });
     const openingHeading = screen.getByRole("heading", { name: "Para entender o estudo" });
     const openingParagraph = screen.getByText(/O estudo incluiu pessoas/);
@@ -134,5 +139,10 @@ describe("scientific article detail", () => {
     const abstractControl = screen.getByText("Ver abstract original em inglês").closest("details");
     expect(abstractControl?.hasAttribute("open")).toBe(false);
     expect(screen.getByText(/Original English abstract with 3\s*m spacing/)).toBeTruthy();
+    expect(
+      container
+        .querySelector("main.scientific-article-detail")
+        ?.hasAttribute("data-scientific-article-detail"),
+    ).toBe(true);
   });
 });
