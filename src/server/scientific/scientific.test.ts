@@ -4,6 +4,7 @@ import test from "node:test";
 import { parseCrossref } from "./adapters/crossref.server";
 import { parseEuropePmc } from "./adapters/europe-pmc.server";
 import { parsePubMedXml } from "./adapters/pubmed.server";
+import { evidenceLevels, studyTypes } from "./classification";
 import { fetchScientific, ScientificHttpError } from "./http";
 import { articleIdentity, bibliographicFallback, normalizeDoi } from "./identity";
 import { deduplicateArticles, mergeArticles, promoteLegacyArticle } from "./merge";
@@ -13,6 +14,7 @@ import {
   type ScientificPersistenceErrorEvent,
   type ScientificPersistenceStage,
 } from "./persistence.server";
+import { normalizePmcid, normalizePmid } from "./persistence-boundary";
 import type { ScientificArticle } from "./types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -213,8 +215,7 @@ function failingPersistenceClient(stage: ScientificPersistenceStage) {
           error: null,
         });
       }
-      if (stage === "identity_lookup")
-        return Promise.resolve({ data: null, error: databaseError });
+      if (stage === "identity_lookup") return Promise.resolve({ data: null, error: databaseError });
       return Promise.resolve({ data: null, error: null });
     }
     single() {
@@ -319,6 +320,46 @@ test("successful persistence does not log a scientific persistence error", async
     "new",
   );
   assert.deepEqual(events, []);
+});
+
+test("persistence boundary normalizes provider data before article insert", async () => {
+  const row = persistedArticleRow({ id: "normalized-article-id" });
+  const { client } = persistenceClient(row, []);
+  const incoming = article("europe_pmc", "unsafe-provider-record", {
+    title: " \n\t ",
+    authors: null as unknown as ScientificArticle["authors"],
+    pmid: "12x",
+    pmcid: "pmc-99",
+  });
+
+  assert.equal(await persistScientificArticle(client, incoming), "new");
+  assert.equal(row.title, "Untitled scientific record");
+  assert.deepEqual(row.authors, []);
+  assert.equal(row.pmid, null);
+  assert.equal(row.pmcid, null);
+});
+
+test("persistence boundary preserves only canonical article identifiers", () => {
+  assert.equal(normalizePmid(" 12345 "), "12345");
+  assert.equal(normalizePmid("12x45"), null);
+  assert.equal(normalizePmcid(" pmc12345 "), "PMC12345");
+  assert.equal(normalizePmcid("PMC-12345"), null);
+});
+
+test("persistence classification domains match the database allowlists", () => {
+  assert.deepEqual(studyTypes, [
+    "systematic_review",
+    "meta_analysis",
+    "guideline",
+    "randomized_trial",
+    "cohort",
+    "case_control",
+    "cross_sectional",
+    "case_report",
+    "editorial",
+    "other",
+  ]);
+  assert.deepEqual(evidenceLevels, ["high", "moderate", "low", "very_low"]);
 });
 
 test("normalizes DOI URL, doi prefix, case and whitespace", () =>
@@ -613,6 +654,39 @@ test("PubMed tolerates absent abstract and DOI", () => {
   )[0];
   assert.equal(a.abstract, null);
   assert.equal(a.doi, null);
+});
+
+test("PubMed uses a non-empty fallback for absent, empty, and markup-only titles", () => {
+  for (const title of [
+    "",
+    "<ArticleTitle></ArticleTitle>",
+    "<ArticleTitle> <i> </i> </ArticleTitle>",
+  ]) {
+    const a = parsePubMedXml(
+      `<PubmedArticle><MedlineCitation><PMID>7</PMID><Article>${title}</Article></MedlineCitation></PubmedArticle>`,
+    )[0];
+    assert.equal(a.title, "Untitled PubMed record");
+  }
+});
+
+test("PubMed canonicalizes PMID and PMCID without repairing invalid identifiers", () => {
+  const [valid, invalid] = parsePubMedXml(
+    `<PubmedArticleSet>
+      <PubmedArticle><MedlineCitation><PMID>42</PMID><Article><ArticleTitle>Valid</ArticleTitle></Article></MedlineCitation><PubmedData><ArticleIdList><ArticleId IdType="pmc">pmc99</ArticleId></ArticleIdList></PubmedData></PubmedArticle>
+      <PubmedArticle><MedlineCitation><PMID>4x2</PMID><Article><ArticleTitle>Invalid</ArticleTitle></Article></MedlineCitation><PubmedData><ArticleIdList><ArticleId IdType="pmc">PMC-99</ArticleId></ArticleIdList></PubmedData></PubmedArticle>
+    </PubmedArticleSet>`,
+  );
+  assert.equal(valid.pmid, "42");
+  assert.equal(valid.pmcid, "PMC99");
+  assert.equal(invalid.pmid, null);
+  assert.equal(invalid.pmcid, null);
+});
+
+test("PubMed represents absent authors as an empty array", () => {
+  const a = parsePubMedXml(
+    `<PubmedArticle><MedlineCitation><PMID>7</PMID><Article><ArticleTitle>Title</ArticleTitle></Article></MedlineCitation></PubmedArticle>`,
+  )[0];
+  assert.deepEqual(a.authors, []);
 });
 
 test("parses Europe PMC identifiers, OA signal and authors", () => {

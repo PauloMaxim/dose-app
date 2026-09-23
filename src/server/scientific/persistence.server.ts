@@ -4,6 +4,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyScientificArticle } from "./classification";
 import { bibliographicFallback, normalizeDoi } from "./identity";
 import { mergeArticles, promoteLegacyArticle } from "./merge";
+import {
+  assertPersistibleClassification,
+  normalizeArticleForPersistence,
+} from "./persistence-boundary";
 import type { ScientificArticle, ScientificSource } from "./types";
 
 export type PersistenceOutcome = "new" | "updated" | "reconciled";
@@ -78,30 +82,31 @@ function throwPersistenceError(
 }
 
 function databaseArticle(article: ScientificArticle) {
-  const classification = classifyScientificArticle(article);
+  const normalized = normalizeArticleForPersistence(article);
+  const classification = assertPersistibleClassification(classifyScientificArticle(normalized));
   return {
-    title: article.title,
-    abstract: article.abstract,
-    authors: article.authors,
-    journal: article.journal,
-    publisher: article.publisher,
-    published_at: article.publishedAt,
-    doi: normalizeDoi(article.doi),
-    pmid: article.pmid,
-    pmcid: article.pmcid?.toUpperCase() ?? null,
-    language: article.language,
-    publication_types: article.publicationTypes,
-    volume: article.volume,
-    issue: article.issue,
-    pages: article.pages,
-    original_url: article.originalUrl,
-    pubmed_url: article.pubmedUrl,
-    pmc_url: article.pmcUrl,
-    doi_url: article.doiUrl,
-    keywords: article.keywords,
-    mesh_terms: article.meshTerms,
-    bibliographic_key: bibliographicFallback(article),
-    ingested_at: article.ingestedAt ?? new Date().toISOString(),
+    title: normalized.title,
+    abstract: normalized.abstract,
+    authors: normalized.authors,
+    journal: normalized.journal,
+    publisher: normalized.publisher,
+    published_at: normalized.publishedAt,
+    doi: normalizeDoi(normalized.doi),
+    pmid: normalized.pmid,
+    pmcid: normalized.pmcid,
+    language: normalized.language,
+    publication_types: normalized.publicationTypes,
+    volume: normalized.volume,
+    issue: normalized.issue,
+    pages: normalized.pages,
+    original_url: normalized.originalUrl,
+    pubmed_url: normalized.pubmedUrl,
+    pmc_url: normalized.pmcUrl,
+    doi_url: normalized.doiUrl,
+    keywords: normalized.keywords,
+    mesh_terms: normalized.meshTerms,
+    bibliographic_key: bibliographicFallback(normalized),
+    ingested_at: normalized.ingestedAt ?? new Date().toISOString(),
     study_type: classification.studyType,
     evidence_level: classification.evidenceLevel,
     classification_version: classification.ruleVersion,
@@ -142,6 +147,7 @@ export async function persistScientificArticle(
   article: ScientificArticle,
   observability: ScientificPersistenceObservability = {},
 ): Promise<PersistenceOutcome> {
+  article = normalizeArticleForPersistence(article);
   const doi = normalizeDoi(article.doi);
   const fallback = bibliographicFallback(article);
   const alternatives = [
@@ -161,16 +167,14 @@ export async function persistScientificArticle(
       .eq("provider", provenance.source)
       .eq("external_id", provenance.externalId)
       .maybeSingle();
-    if (source.error)
-      throwPersistenceError(article, "source_lookup", source.error, observability);
+    if (source.error) throwPersistenceError(article, "source_lookup", source.error, observability);
     if (source.data?.article_id) {
       const found = await client
         .from("articles")
         .select("*")
         .eq("id", source.data.article_id)
         .single();
-      if (found.error)
-        throwPersistenceError(article, "source_lookup", found.error, observability);
+      if (found.error) throwPersistenceError(article, "source_lookup", found.error, observability);
       existing = found.data;
       matchedSource = true;
       break;
@@ -209,8 +213,7 @@ export async function persistScientificArticle(
       .eq("id", existing.id)
       .select("id")
       .single();
-    if (result.error)
-      throwPersistenceError(article, "article_update", result.error, observability);
+    if (result.error) throwPersistenceError(article, "article_update", result.error, observability);
     articleId = result.data.id;
     outcome = matchedSource ? "updated" : "reconciled";
   } else {
@@ -219,8 +222,7 @@ export async function persistScientificArticle(
       .insert(databaseArticle(article))
       .select("id")
       .single();
-    if (result.error)
-      throwPersistenceError(article, "article_insert", result.error, observability);
+    if (result.error) throwPersistenceError(article, "article_insert", result.error, observability);
     articleId = result.data.id;
     outcome = "new";
   }
@@ -239,8 +241,7 @@ export async function persistScientificArticle(
       },
       { onConflict: "provider,external_id" },
     );
-    if (result.error)
-      throwPersistenceError(article, "source_upsert", result.error, observability);
+    if (result.error) throwPersistenceError(article, "source_upsert", result.error, observability);
   }
   return outcome;
 }
