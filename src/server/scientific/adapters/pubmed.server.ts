@@ -2,6 +2,7 @@ import "../server-only";
 import { fetchScientific, type HttpOptions } from "../http";
 import { attr, emptyArticle, tag, tags } from "../parse-utils";
 import { normalizeDoi } from "../identity";
+import { normalizePmcid, normalizePmid } from "../persistence-boundary";
 import type { DiscoveryOptions, ScientificAdapter, ScientificArticle } from "../types";
 
 export function parsePubMedXml(xml: string): ScientificArticle[] {
@@ -9,15 +10,13 @@ export function parsePubMedXml(xml: string): ScientificArticle[] {
     (m) => m[1],
   );
   return records.map((record) => {
-    const pmid = tag(record, "PMID") ?? "";
-    const article = emptyArticle(
-      "pubmed",
-      tag(record, "ArticleTitle") ?? "Untitled PubMed record",
-      pmid,
-    );
-    article.pmid = pmid || null;
+    const rawPmid = tag(record, "PMID");
+    const pmid = normalizePmid(rawPmid);
+    const title = tag(record, "ArticleTitle") || "Untitled PubMed record";
+    const article = emptyArticle("pubmed", title, pmid ?? rawPmid ?? "unknown");
+    article.pmid = pmid;
     article.doi = normalizeDoi(attr(record, "ArticleId", "IdType", "doi"));
-    article.pmcid = attr(record, "ArticleId", "IdType", "pmc")?.toUpperCase() ?? null;
+    article.pmcid = normalizePmcid(attr(record, "ArticleId", "IdType", "pmc"));
     article.abstract = tags(record, "AbstractText").join("\n") || null;
     article.journal = tag(record, "Title") ?? tag(record, "ISOAbbreviation");
     article.language = tag(record, "Language");

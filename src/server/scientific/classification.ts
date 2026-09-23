@@ -14,7 +14,8 @@ export const studyTypes = [
 ] as const;
 
 export type StudyType = (typeof studyTypes)[number];
-export type EvidenceLevel = "high" | "moderate" | "low" | "very_low";
+export const evidenceLevels = ["high", "moderate", "low", "very_low"] as const;
+export type EvidenceLevel = (typeof evidenceLevels)[number];
 
 export interface ArticleClassification {
   studyType: StudyType;
