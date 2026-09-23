@@ -121,7 +121,13 @@ describe("scientific article detail", () => {
     };
 
     render(<ScientificArticleDetailView article={article} />);
-    expect(screen.getByRole("heading", { name: /Mitiperstat não melhorou sintomas/ })).toBeTruthy();
+    const headline = screen.getByRole("heading", { name: /Mitiperstat não melhorou sintomas/ });
+    const openingHeading = screen.getByRole("heading", { name: "Para entender o estudo" });
+    const openingParagraph = screen.getByText(/O estudo incluiu pessoas/);
+    expect(headline).toBeTruthy();
+    expect(
+      openingHeading.compareDocumentPosition(openingParagraph) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText("−1,4 ponto")).toBeTruthy();
     expect(screen.getAllByText("+3,8 m")).toHaveLength(2);
     expect(screen.getByText("Até onde esta Dose consegue ir?")).toBeTruthy();

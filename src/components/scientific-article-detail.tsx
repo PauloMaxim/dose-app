@@ -21,8 +21,11 @@ function DoseArticle({
   document: DoseDocument;
 }) {
   return (
-    <main className="min-h-0 flex-1 overflow-y-auto bg-bg scrollbar-none">
-      <article className="mx-auto w-full max-w-5xl px-5 pb-20 pt-4 sm:px-8 lg:px-12">
+    <main
+      className="scientific-article-detail min-h-0 min-w-0 flex-1 overflow-y-auto bg-bg scrollbar-none"
+      data-scientific-article-detail
+    >
+      <article className="mx-auto w-full max-w-6xl px-5 pb-20 pt-4 sm:px-8 lg:px-12">
         <Link
           to="/artigos"
           aria-label="Voltar para artigos"
@@ -31,11 +34,11 @@ function DoseArticle({
           <ArrowLeft className="size-5" aria-hidden="true" />
         </Link>
 
-        <header className="mt-10 max-w-4xl border-t border-teal/60 pt-6">
+        <header className="mt-10 max-w-5xl border-t border-teal/60 pt-6">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal">
             {document.label}
           </p>
-          <h1 className="mt-5 font-serif text-[2.35rem] font-semibold leading-[1.04] tracking-[-0.035em] sm:text-6xl">
+          <h1 className="mt-5 text-balance font-serif text-[clamp(2.35rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.04em]">
             {document.headline}
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-muted sm:text-xl">{document.deck}</p>
@@ -45,17 +48,22 @@ function DoseArticle({
           </p>
         </header>
 
-        <section
-          className="mt-14 grid gap-6 border-y border-border py-9 font-serif text-xl leading-[1.65] sm:text-[1.35rem] lg:grid-cols-2"
-          aria-label="Em contexto"
-        >
-          {document.openingSummary.map((paragraph) => (
-            <p key={paragraph.id}>{paragraph.text}</p>
-          ))}
+        <section className="mt-14 border-y border-border py-9" aria-labelledby="opening-heading">
+          <h2
+            id="opening-heading"
+            className="text-[11px] font-semibold uppercase tracking-[0.18em] text-teal"
+          >
+            Para entender o estudo
+          </h2>
+          <div className="mt-6 max-w-3xl space-y-6 font-serif text-xl leading-[1.65] sm:text-[1.35rem]">
+            {document.openingSummary.map((paragraph) => (
+              <p key={paragraph.id}>{paragraph.text}</p>
+            ))}
+          </div>
         </section>
 
-        <div className="mt-16 grid gap-x-16 lg:grid-cols-[minmax(0,1fr)_15rem]">
-          <div>
+        <div className="scientific-article-chapters mt-16 grid min-w-0 gap-x-12">
+          <div className="min-w-0 max-w-3xl">
             {document.chapters.map((chapter, index) => (
               <section key={chapter.id} className="mb-16" aria-labelledby={chapter.id}>
                 <p className="text-[11px] font-semibold tabular-nums tracking-[0.18em] text-teal">
@@ -91,7 +99,7 @@ function DoseArticle({
           </div>
 
           <aside
-            className="mb-16 lg:sticky lg:top-8 lg:order-none lg:self-start"
+            className="scientific-article-numbers mb-16 min-w-0"
             aria-labelledby="numbers-heading"
           >
             <h2
