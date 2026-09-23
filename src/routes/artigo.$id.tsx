@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bookmark, Heart, Play, Share2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { BackButton } from "@/components/back-button";
+import { ScientificArticleDetailView } from "@/components/scientific-article-detail";
 import { StudyPill } from "@/components/article-card";
 import { InsightView } from "@/components/insight-view";
 import { SaveSheet } from "@/components/save-sheet";
@@ -15,12 +16,42 @@ import { isSaved, useDose } from "@/lib/store";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { authEnabled } from "@/lib/auth/client";
 import { persistLibraryEntry } from "@/lib/user-content";
+import { resolveArticleRouteKind } from "@/lib/article-route";
+import { readMyScientificArticleDetail } from "@/server/scientific/article-detail-service";
 
 export const Route = createFileRoute("/artigo/$id")({
+  loader: async ({ params }) => {
+    const kind = resolveArticleRouteKind(params.id, (slug) => Boolean(getArticle(slug)));
+    if (kind === "scientific") {
+      const article = await readMyScientificArticleDetail({ data: params.id });
+      return article ? { kind, article } : { kind: "not-found" as const };
+    }
+    return { kind };
+  },
   component: ArtigoPage,
 });
 
 function ArtigoPage() {
+  const result = Route.useLoaderData();
+  if (result.kind === "scientific") return <ScientificArticleDetailView article={result.article} />;
+  if (result.kind === "not-found") return <ArticleNotFound />;
+  return <LegacyArticleDetail />;
+}
+
+function ArticleNotFound() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-bg px-6 text-center">
+      <div>
+        <p className="text-muted">Artigo não encontrado.</p>
+        <Link to="/artigos" className="mt-3 inline-block text-teal">
+          Voltar
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function LegacyArticleDetail() {
   const { id } = Route.useParams();
   const article = getArticle(id);
   const progress = useDose((s) => s.progress[id]);
