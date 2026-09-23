@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import type { ScientificFeedPresentation } from "@/lib/scientific-feed-presentation";
 import { useDose } from "@/lib/store";
@@ -24,13 +25,20 @@ export function ScientificFeedCard({
   compact?: boolean;
 }) {
   const locale = useDose((state) => state.profile.locale);
-  const primaryLink = item.sourceLinks[0];
   const content = (
     <article className="rounded-2xl bg-card p-4">
       <div className="flex flex-wrap gap-2 text-[11px] font-medium text-muted">
         <span className="rounded-full bg-card-2 px-2.5 py-1">{studyLabels[item.studyType]}</span>
       </div>
-      <h3 className="mt-3 text-[17px] font-semibold leading-snug tracking-tight">{item.title}</h3>
+      <h3 className="mt-3 text-[17px] font-semibold leading-snug tracking-tight">
+        <Link
+          to="/artigo/$id"
+          params={{ id: item.id }}
+          className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {item.title}
+        </Link>
+      </h3>
       {item.authors.length > 0 && (
         <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted">
           {item.authors.join(", ")}
@@ -95,14 +103,13 @@ export function ScientificFeedCard({
             <ExternalLink className="size-3.5" aria-hidden="true" />
           </a>
         ))}
-        {!primaryLink && (
+        {item.sourceLinks.length === 0 && (
           <p className="text-xs text-subtle">Fonte externa indisponível neste registro.</p>
         )}
       </div>
     </article>
   );
 
-  if (!primaryLink) return content;
   return <div>{content}</div>;
 }
 

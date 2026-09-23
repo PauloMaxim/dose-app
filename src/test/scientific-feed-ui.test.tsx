@@ -2,7 +2,17 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ScientificFeedCard, ScientificFeedStatus } from "@/components/scientific-feed";
+import { ScientificArticleDetailView } from "@/components/scientific-article-detail";
 import type { ScientificFeedPresentation } from "@/lib/scientific-feed-presentation";
+import type { ScientificArticleDetail } from "@/server/scientific/article-detail";
+
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, params, children, ...props }: any) => (
+    <a href={params ? to.replace("$id", params.id) : to} {...props}>
+      {children}
+    </a>
+  ),
+}));
 
 afterEach(cleanup);
 
@@ -51,5 +61,39 @@ describe("scientific feed classification presentation", () => {
     render(<ScientificFeedCard item={item} />);
     expect(screen.getByText("Ensaio randomizado")).toBeTruthy();
     expect(screen.queryByText(/Evidência (alta|moderada|baixa|muito baixa)/i)).toBeNull();
+    expect(screen.getByRole("link", { name: "Original title" }).getAttribute("href")).toBe(
+      "/artigo/article",
+    );
+    expect(screen.getByRole("link", { name: "PubMed" }).getAttribute("target")).toBe("_blank");
+  });
+});
+
+describe("scientific article detail", () => {
+  it("renders an honest missing-abstract state without cover, summary or clinical evidence claims", () => {
+    const article: ScientificArticleDetail = {
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      title: "Original title",
+      authors: [],
+      journal: null,
+      publisher: null,
+      publishedAt: null,
+      doi: null,
+      pmid: null,
+      pmcid: null,
+      abstract: null,
+      publicationTypes: [],
+      studyType: null,
+      classificationVersion: null,
+      provenance: [{ provider: "europe_pmc", externalId: "MED/1", sourceUrl: null }],
+      sourceLinks: [],
+      topics: [],
+      specialties: [],
+    };
+    const { container } = render(<ScientificArticleDetailView article={article} />);
+    expect(screen.getByRole("heading", { name: "Original title" })).toBeTruthy();
+    expect(screen.getByText("Abstract não disponível neste registro.")).toBeTruthy();
+    expect(screen.getByText(/Ainda não há resumo Dose/)).toBeTruthy();
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.queryByText(/Nível de evidência|1A|1B/)).toBeNull();
   });
 });
