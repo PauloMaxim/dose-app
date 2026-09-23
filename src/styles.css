@@ -191,7 +191,30 @@ html[data-theme="light"] {
   }
 
   .phone-shell {
-    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04), 0 40px 80px rgb(0 0 0 / 0.55);
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.04),
+      0 40px 80px rgb(0 0 0 / 0.55);
+  }
+
+  .phone-shell:has([data-scientific-article-detail]) {
+    max-width: none;
+  }
+}
+
+.scientific-article-detail {
+  container-name: scientific-article;
+  container-type: inline-size;
+}
+
+@container scientific-article (min-width: 64rem) {
+  .scientific-article-chapters {
+    grid-template-columns: minmax(0, 1fr) 15rem;
+  }
+
+  .scientific-article-numbers {
+    position: sticky;
+    top: 2rem;
+    align-self: start;
   }
 }
 
