@@ -226,3 +226,26 @@ test("endpoint and migration remain server-only, bounded, and decoupled from cla
   assert.match(migration, /revoke all .* from public, anon, authenticated/);
   assert.doesNotMatch(migration, /grant .* to anon|grant .* to authenticated/i);
 });
+
+test("scientific persistence grants only the table operations used by ingestion", async () => {
+  const migration = await readFile(
+    "supabase/migrations/202610020001_scientific_service_role_grants.sql",
+    "utf8",
+  );
+
+  assert.match(
+    migration,
+    /grant select, insert, update on table public\.articles to service_role;/i,
+  );
+  assert.match(
+    migration,
+    /grant select, insert, update on table public\.article_sources to service_role;/i,
+  );
+  assert.doesNotMatch(migration, /\b(delete|truncate|references|trigger)\b/i);
+  assert.doesNotMatch(migration, /\b(anon|authenticated)\b/i);
+  assert.doesNotMatch(migration, /\b(disable|policy|security\s+definer)\b/i);
+  assert.doesNotMatch(
+    migration,
+    /\b(article_topics|article_summaries|scientific_ingestion_operations)\b/i,
+  );
+});
