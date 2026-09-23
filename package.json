@@ -8,7 +8,8 @@
   },
   "scripts": {
     "dev": "node scripts/with-app-env.mjs vite dev --host 0.0.0.0 --port 8080",
-    "build": "node scripts/with-app-env.mjs vite build",
+    "build": "node scripts/with-app-env.mjs vite build && node scripts/check-scientific-route-build.mjs",
+    "check:scientific-routes": "node scripts/check-scientific-route-build.mjs",
     "db:test:rls": "supabase test db",
     "build:dev": "node scripts/with-app-env.mjs vite build --mode development",
     "preview": "node scripts/with-app-env.mjs vite preview",
