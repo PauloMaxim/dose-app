@@ -96,4 +96,37 @@ describe("scientific article detail", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(screen.queryByText(/Nível de evidência|1A|1B/)).toBeNull();
   });
+
+  it("renders a DoseDocument as the primary reading experience and keeps the abstract secondary", () => {
+    const article: ScientificArticleDetail = {
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      title: "Original mitiperstat trial title",
+      authors: ["Researcher One"],
+      journal: "Scientific journal",
+      publisher: null,
+      publishedAt: "2026-09-01",
+      doi: "10.1000/mitiperstat",
+      pmid: "42717033",
+      pmcid: null,
+      abstract: "Original English abstract with 3\u2009m spacing.",
+      publicationTypes: ["Randomized Controlled Trial"],
+      studyType: "randomized_trial",
+      classificationVersion: "v1",
+      provenance: [{ provider: "pubmed", externalId: "42717033", sourceUrl: null }],
+      sourceLinks: [
+        { kind: "pubmed", label: "PubMed", url: "https://pubmed.ncbi.nlm.nih.gov/42717033/" },
+      ],
+      topics: [],
+      specialties: [],
+    };
+
+    render(<ScientificArticleDetailView article={article} />);
+    expect(screen.getByRole("heading", { name: /Mitiperstat não melhorou sintomas/ })).toBeTruthy();
+    expect(screen.getByText("−1,4 ponto")).toBeTruthy();
+    expect(screen.getAllByText("+3,8 m")).toHaveLength(2);
+    expect(screen.getByText("Até onde esta Dose consegue ir?")).toBeTruthy();
+    const abstractControl = screen.getByText("Ver abstract original em inglês").closest("details");
+    expect(abstractControl?.hasAttribute("open")).toBe(false);
+    expect(screen.getByText(/Original English abstract with 3\s*m spacing/)).toBeTruthy();
+  });
 });

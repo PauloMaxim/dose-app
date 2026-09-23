@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveArticleRouteKind } from "../../lib/article-route";
-import { toScientificArticleDetail } from "./article-detail";
+import { normalizeScientificText, toScientificArticleDetail } from "./article-detail";
 import { queryScientificArticleDetail } from "./article-detail.server";
 
 const UUID = "123e4567-e89b-12d3-a456-426614174000";
@@ -138,4 +138,12 @@ test("detail query validates UUID, restricts real provenance and returns not-fou
     "crossref",
   ]);
   await assert.rejects(() => queryScientificArticleDetail(client as never, "summit"));
+});
+
+test("scientific text normalization decodes entities without interpreting HTML", () => {
+  assert.equal(
+    normalizeScientificText("change of 3&#x2009;m &amp; safe"),
+    "change of 3\u2009m & safe",
+  );
+  assert.equal(normalizeScientificText("<strong>literal</strong>"), "<strong>literal</strong>");
 });
