@@ -24,11 +24,11 @@ export function createPmid42717033DoseDocument(
     label: "Edição editorial Dose" as const,
     headline:
       "Mitiperstat não melhorou sintomas nem capacidade de exercício na insuficiência cardíaca com fração de ejeção preservada ou levemente reduzida",
-    deck: "Um ensaio clínico fase 2b testou se bloquear a MPO poderia melhorar manifestações clínicas da insuficiência cardíaca. Entre 711 pacientes, as duas doses de mitiperstat, analisadas em conjunto, não mostraram benefício nos dois principais desfechos em 16 semanas.",
+    deck: "Um ensaio clínico de fase 2b testou se bloquear a mieloperoxidase poderia melhorar manifestações clínicas da doença. Em 711 pacientes, o tratamento não apresentou benefício nos dois principais desfechos avaliados.",
     openingSummary: [
       {
         id: "opening-population",
-        text: "O estudo incluiu pessoas com insuficiência cardíaca e fração de ejeção acima de 40%, abrangendo a apresentação preservada ou levemente reduzida. A pergunta clínica era se sintomas e capacidade de exercício poderiam melhorar com a intervenção.",
+        text: "O estudo incluiu pessoas com insuficiência cardíaca e fração de ejeção acima de 40%, abrangendo a apresentação preservada ou levemente reduzida. O racional investigado olha além da medida da contração cardíaca: ele se concentra em uma via biológica que os autores relacionam aos sintomas e à limitação funcional nessa população.",
         factIds: requireFacts([
           fid("condition"),
           fid("ef-eligibility"),
@@ -38,7 +38,7 @@ export function createPmid42717033DoseDocument(
       },
       {
         id: "opening-rationale",
-        text: "Os autores partiram de um racional biológico: oxidantes derivados da mieloperoxidase, ou MPO, podem reduzir a disponibilidade de óxido nítrico e favorecer disfunção microvascular coronariana, rigidez dos cardiomiócitos e fibrose intersticial. O ensaio perguntou se interferir nessa via com mitiperstat se traduziria em melhora clínica — uma hipótese, não uma causalidade clínica já demonstrada.",
+        text: "O encadeamento proposto começa na mieloperoxidase, ou MPO: oxidantes derivados dessa enzima podem reduzir a disponibilidade de óxido nítrico e favorecer disfunção microvascular coronariana, rigidez dos cardiomiócitos e fibrose intersticial. Esse é o racional mecanístico apresentado pelos autores, não uma cadeia causal clínica já comprovada. A pergunta que conduz o ensaio é direta: se a atividade da MPO for inibida, os pacientes podem apresentar menos sintomas e melhor capacidade de exercício?",
         factIds: requireFacts([
           fid("mpo-oxidants"),
           fid("mpo-no"),
@@ -58,7 +58,9 @@ export function createPmid42717033DoseDocument(
             id: "rationale-prose",
             kind: "prose" as const,
             paragraphs: [
-              "A MPO é uma enzima relacionada à produção de oxidantes. No racional apresentado pelos autores, esses oxidantes podem diminuir a disponibilidade de óxido nítrico e favorecer alterações microvasculares, rigidez das células musculares cardíacas e fibrose. Essas relações tornam a via uma candidata a estudo; por si só, não provam que bloqueá-la melhorará os pacientes.",
+              "A MPO é uma enzima relacionada à produção de oxidantes. No modelo apresentado pelos autores, o percurso de interesse pode ser lido assim: MPO → oxidantes derivados da MPO → menor disponibilidade de óxido nítrico.",
+              "A menor disponibilidade de óxido nítrico aparece, nesse racional, ao lado de alterações potencialmente relevantes para a doença: disfunção microvascular coronariana, rigidez dos cardiomiócitos e fibrose intersticial. O abstract descreve essas relações como mecanismos implicados na fisiopatologia; ele não demonstra que essa sequência seja, por si só, uma causa clínica comprovada dos sintomas.",
+              "Essa distinção é central. Uma via biologicamente plausível pode justificar um experimento, mas ainda é necessário testar se modificá-la produz uma diferença que o paciente perceba ou que possa ser medida funcionalmente.",
             ],
             factIds: requireFacts([
               fid("mpo-oxidants"),
@@ -78,7 +80,9 @@ export function createPmid42717033DoseDocument(
             id: "treatment-prose",
             kind: "prose" as const,
             paragraphs: [
-              "Mitiperstat é o medicamento investigado neste estudo e atua como inibidor da MPO. A proposta do ensaio foi testar se interferir nessa via biológica poderia produzir melhora perceptível nos sintomas e na função de exercício.",
+              "Mitiperstat é o medicamento investigado neste estudo. Ele atua como inibidor da MPO e foi usado para colocar o racional biológico à prova, não simplesmente como um tratamento dirigido ao alívio imediato de um sintoma.",
+              "A estratégia pode ser resumida em duas etapas. Primeiro, o modelo dos autores: MPO → oxidantes → alterações associadas à doença. Depois, a hipótese experimental: inibir a MPO → tentar reduzir essas alterações → verificar se sintomas e capacidade funcional melhoram.",
+              "O ensaio, portanto, não presumiu que bloquear a enzima necessariamente produziria benefício. Ele mediu se a interferência nessa via se traduziria em resultados clínicos observáveis.",
             ],
             factIds: requireFacts([
               fid("mitiperstat-mpo"),
@@ -92,6 +96,33 @@ export function createPmid42717033DoseDocument(
         id: "chapter-design",
         title: "Como o estudo foi feito?",
         blocks: [
+          {
+            id: "design-prose",
+            kind: "prose" as const,
+            paragraphs: [
+              "O ensaio foi multicêntrico, randomizado, duplo-cego, controlado por placebo e conduzido em três grupos paralelos. Era um estudo de fase 2b: uma etapa voltada a explorar se o sinal biológico se converte em eficácia clínica e a observar segurança antes de decisões sobre investigações posteriores.",
+              "Participaram 711 pacientes com insuficiência cardíaca e fração de ejeção acima de 40%; 45% eram mulheres. A randomização foi feita na proporção 1:1:1 entre mitiperstat 2,5 mg, mitiperstat 5 mg e placebo. O abstract não informa quantos participantes ficaram em cada braço, portanto esta Dose não estima esses números.",
+              "O tratamento foi planejado para 48 semanas. Os dois desfechos coprimários — sintomas pelo KCCQ-TSS e capacidade funcional pela caminhada de seis minutos — foram avaliados em 16 semanas.",
+            ],
+            factIds: requireFacts([
+              fid("design-multicenter"),
+              fid("design-randomized"),
+              fid("design-blinding"),
+              fid("design-placebo"),
+              fid("design-parallel"),
+              fid("design-phase"),
+              fid("sample-size"),
+              fid("ef-eligibility"),
+              fid("women"),
+              fid("allocation"),
+              fid("arm-low-dose"),
+              fid("arm-high-dose"),
+              fid("arm-placebo"),
+              fid("treatment-duration"),
+              fid("endpoint-kccq"),
+              fid("endpoint-6mwd"),
+            ]),
+          },
           {
             id: "design-flow",
             kind: "study_design" as const,
@@ -124,7 +155,9 @@ export function createPmid42717033DoseDocument(
             id: "endpoints-prose",
             kind: "prose" as const,
             paragraphs: [
-              "Os dois desfechos principais medidos em 16 semanas foram o KCCQ-TSS, uma pontuação sobre frequência e impacto dos sintomas de insuficiência cardíaca relatados pelo paciente, e a distância percorrida em seis minutos (6MWD), uma medida prática de capacidade funcional.",
+              "Os dois desfechos coprimários medidos em 16 semanas olham para dimensões diferentes e complementares. O KCCQ-TSS é a pontuação total de sintomas do Kansas City Cardiomyopathy Questionnaire: ela organiza o relato do paciente sobre frequência e impacto dos sintomas da insuficiência cardíaca.",
+              "A distância percorrida em seis minutos, ou 6MWD, é uma medida padronizada de capacidade funcional. Em vez de perguntar apenas como a pessoa se sente, ela registra quanto consegue caminhar durante um intervalo definido.",
+              "Em conjunto, os desfechos permitiam perguntar tanto se o paciente se sentia melhor quanto se apresentava melhora mensurável da capacidade de exercício.",
             ],
             factIds: requireFacts([fid("endpoint-kccq"), fid("endpoint-6mwd")]),
           },
@@ -144,7 +177,7 @@ export function createPmid42717033DoseDocument(
             comparison: "Duas doses de mitiperstat agrupadas, contra placebo",
             timepoint: "16 semanas",
             interpretation:
-              "O intervalo de confiança inclui zero e o resultado não demonstrou diferença estatisticamente significativa. A estimativa pontual não deve ser lida sem sua incerteza.",
+              "A diferença média corrigida por placebo foi de −1,4 ponto: a estimativa pontual não favoreceu o mitiperstat. O IC95% foi de −3,9 a 1,2 e inclui zero, portanto o estudo não demonstrou benefício estatisticamente significativo nesse desfecho. O valor de P = 0,29 também não atingiu o limiar convencional de significância; ele não mede importância clínica e não prova ausência absoluta de efeito. Por isso, −1,4 não deve ser interpretado sem o intervalo que expressa sua incerteza.",
             factIds: requireFacts([fid("result-kccq")]),
           },
         ],
@@ -163,7 +196,7 @@ export function createPmid42717033DoseDocument(
             comparison: "Duas doses de mitiperstat agrupadas, contra placebo",
             timepoint: "16 semanas",
             interpretation:
-              "Também aqui, o intervalo inclui zero e não houve diferença estatisticamente significativa demonstrada.",
+              "A estimativa pontual foi positiva: +3,8 m para as doses agrupadas de mitiperstat contra placebo. Isoladamente, porém, esse número seria uma leitura inadequada. O IC95% vai de −3,1 a 10,8 m e atravessa zero; dentro da incerteza estimada, os dados são compatíveis com pequena melhora, ausência de efeito ou pequena piora. Com P = 0,28, não houve demonstração de diferença estatisticamente significativa.",
             factIds: requireFacts([fid("result-6mwd")]),
           },
         ],
@@ -176,7 +209,8 @@ export function createPmid42717033DoseDocument(
             id: "secondary-prose",
             kind: "prose" as const,
             paragraphs: [
-              "Segundo o abstract, o mitiperstat também não melhorou nenhum desfecho secundário. Como a fonte disponível não traz os resultados detalhados de cada um, esta Dose não os quantifica nem os interpreta separadamente.",
+              "O abstract relata que o mitiperstat não melhorou nenhum dos desfechos secundários. Essa é a extensão do que a fonte disponível permite afirmar.",
+              "Sem os resultados numéricos detalhados de cada desfecho, esta Dose não pode comparar magnitudes, intervalos de confiança ou diferenças entre doses, nem acrescentar nomes de resultados que não estão representados na fonte estruturada.",
             ],
             factIds: requireFacts([fid("result-kccq"), fid("result-6mwd")]),
           },
@@ -212,7 +246,9 @@ export function createPmid42717033DoseDocument(
             id: "conclusion-prose",
             kind: "prose" as const,
             paragraphs: [
-              "Nos dois desfechos principais e no momento avaliados, o estudo não demonstrou benefício clínico do mitiperstat em comparação com placebo. Isso não estabelece equivalência, ausência absoluta de efeito ou ineficácia em toda população e contexto possíveis.",
+              "Para os principais objetivos clínicos deste estudo, não houve benefício demonstrado. Em 16 semanas, as doses de mitiperstat analisadas em conjunto não melhoraram os sintomas medidos pelo KCCQ-TSS nem a capacidade de exercício medida pela caminhada de seis minutos em comparação com placebo.",
+              "A hipótese biológica era plausível o suficiente para ser testada, mas, neste ensaio de fase 2b, bloquear a MPO com mitiperstat não se traduziu em melhora dos resultados clínicos avaliados.",
+              "Essa conclusão é específica. Ela não demonstra equivalência entre os grupos, não prova ausência absoluta de efeito, não estabelece ineficácia universal do medicamento e não refuta toda a biologia relacionada à MPO.",
             ],
             factIds: requireFacts([fid("result-kccq"), fid("result-6mwd")]),
           },
@@ -227,7 +263,8 @@ export function createPmid42717033DoseDocument(
             kind: "prose" as const,
             paragraphs: [
               "Na população estudada, nas doses avaliadas e nos desfechos definidos pelo ensaio, a inibição da MPO com mitiperstat não produziu benefício clínico demonstrável.",
-              "O resultado não significa automaticamente que a MPO não participe da fisiopatologia nem que qualquer estratégia futura contra essa via falhará.",
+              "O estudo acrescenta uma resposta clínica delimitada a uma hipótese mecanística: interferir nessa via com este medicamento, nessas doses e segundo estes desfechos não gerou o benefício esperado.",
+              "Isso não significa automaticamente que a MPO não participe da fisiopatologia ou que toda futura estratégia contra essa via falhará. Significa que plausibilidade biológica e benefício clínico não são sinônimos — e que, nas condições testadas, a tradução clínica não foi demonstrada.",
             ],
             factIds: requireFacts([
               fid("mitiperstat-mpo"),
