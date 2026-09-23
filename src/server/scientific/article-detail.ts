@@ -54,8 +54,33 @@ type DetailRow = {
   article_topics?: unknown;
 };
 
+const namedEntities: Record<string, string> = {
+  amp: "&",
+  apos: "'",
+  gt: ">",
+  lt: "<",
+  nbsp: "\u00a0",
+  quot: '"',
+};
+
+/** Decodes text at the persisted-data presentation boundary without interpreting markup. */
+export function normalizeScientificText(value: string) {
+  return value.replace(/&(#(?:x[\da-f]+|\d+)|[a-z]+);/gi, (entity, token: string) => {
+    if (token.startsWith("#")) {
+      const hexadecimal = token[1]?.toLowerCase() === "x";
+      const codePoint = Number.parseInt(token.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
+      try {
+        return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
+      } catch {
+        return entity;
+      }
+    }
+    return namedEntities[token.toLowerCase()] ?? entity;
+  });
+}
+
 const nullableString = (value: unknown) =>
-  typeof value === "string" && value.trim() ? value : null;
+  typeof value === "string" && value.trim() ? normalizeScientificText(value.trim()) : null;
 
 function authorName(value: unknown): string | null {
   if (!value || typeof value !== "object") return null;
