@@ -490,8 +490,11 @@ export function validateEditorialPipeline(input: {
       );
   if (
     input.evidenceSet.sourceSet.id !== input.sourceSet.id ||
+    input.evidenceSet.sourceSet.version !== input.sourceSet.version ||
     input.factSet.sourceSet.id !== input.sourceSet.id ||
-    input.interpretation.sourceSet.id !== input.sourceSet.id
+    input.factSet.sourceSet.version !== input.sourceSet.version ||
+    input.interpretation.sourceSet.id !== input.sourceSet.id ||
+    input.interpretation.sourceSet.version !== input.sourceSet.version
   )
     issues.error(
       "PIPELINE_SOURCE_LINEAGE_BROKEN",
@@ -499,14 +502,20 @@ export function validateEditorialPipeline(input: {
       "sourceSet",
       "Downstream artifacts must reference the supplied source set.",
     );
-  if (input.factSet.evidenceSet.id !== input.evidenceSet.id)
+  if (
+    input.factSet.evidenceSet.id !== input.evidenceSet.id ||
+    input.factSet.evidenceSet.version !== input.evidenceSet.version
+  )
     issues.error(
       "PIPELINE_EVIDENCE_LINEAGE_BROKEN",
       "pipeline",
       "factSet.evidenceSet",
       "Fact set must reference the supplied evidence set.",
     );
-  if (input.interpretation.factSet.id !== input.factSet.id)
+  if (
+    input.interpretation.factSet.id !== input.factSet.id ||
+    input.interpretation.factSet.version !== input.factSet.version
+  )
     issues.error(
       "PIPELINE_FACT_LINEAGE_BROKEN",
       "pipeline",

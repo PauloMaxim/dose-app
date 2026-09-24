@@ -285,3 +285,47 @@ test("the golden fixture has complete lineage and validators contain no PMID spe
     ).has("PIPELINE_FACT_LINEAGE_BROKEN"),
   );
 });
+
+test("pipeline lineage rejects reference version mismatches even when IDs match", () => {
+  const evidenceWithWrongSourceVersion = structuredClone(pmid42717033EvidenceSet);
+  (evidenceWithWrongSourceVersion.sourceSet as { version: string }).version =
+    "scientific-source-set.previous";
+  assert.ok(
+    errorCodes(
+      validateEditorialPipeline({
+        sourceSet: pmid42717033SourceSet,
+        evidenceSet: evidenceWithWrongSourceVersion,
+        factSet: pmid42717033FactSet,
+        interpretation: pmid42717033Interpretation,
+      }),
+    ).has("PIPELINE_SOURCE_LINEAGE_BROKEN"),
+  );
+
+  const factSetWithWrongEvidenceVersion = structuredClone(pmid42717033FactSet);
+  (factSetWithWrongEvidenceVersion.evidenceSet as { version: string }).version =
+    "scientific-evidence-set.previous";
+  assert.ok(
+    errorCodes(
+      validateEditorialPipeline({
+        sourceSet: pmid42717033SourceSet,
+        evidenceSet: pmid42717033EvidenceSet,
+        factSet: factSetWithWrongEvidenceVersion,
+        interpretation: pmid42717033Interpretation,
+      }),
+    ).has("PIPELINE_EVIDENCE_LINEAGE_BROKEN"),
+  );
+
+  const interpretationWithWrongFactVersion = structuredClone(pmid42717033Interpretation);
+  (interpretationWithWrongFactVersion.factSet as { version: string }).version =
+    "rct-scientific-fact-set.previous";
+  assert.ok(
+    errorCodes(
+      validateEditorialPipeline({
+        sourceSet: pmid42717033SourceSet,
+        evidenceSet: pmid42717033EvidenceSet,
+        factSet: pmid42717033FactSet,
+        interpretation: interpretationWithWrongFactVersion,
+      }),
+    ).has("PIPELINE_FACT_LINEAGE_BROKEN"),
+  );
+});
