@@ -18,6 +18,7 @@ import {
   pmid41910396EvidenceSet,
   pmid41910396FactSet,
   pmid41910396Interpretation,
+  pmid41910396PrimaryResultGap,
   pmid41910396SourceDocument,
   pmid41910396SourceSet,
 } from "./pmid-41910396.fixture";
@@ -161,14 +162,71 @@ test("rct.v1 boundary: an eGFR slope difference is not an available estimate typ
           estimate: {
             ...result.availability.value.estimate,
             measureType: "slope_difference",
-            value: 3.02,
-            unit: "ml/min/1.73 m2/year",
+            value: pmid41910396PrimaryResultGap.observed.betweenGroupDifference.value,
+            unit: pmid41910396PrimaryResultGap.observed.betweenGroupDifference.unit,
+            confidenceInterval: {
+              status: "available",
+              value:
+                pmid41910396PrimaryResultGap.observed.betweenGroupDifference.confidenceInterval,
+            },
+            pValue: {
+              status: "available",
+              value: pmid41910396PrimaryResultGap.observed.betweenGroupDifference.pValue,
+            },
           },
         },
       },
     }).success,
     false,
   );
+});
+
+test("PMID 41910396 records the source-observed primary result only as an rct.v1 gap", () => {
+  const availableValues = pmid41910396FactSet.facts.flatMap((fact) =>
+    fact.availability.status === "available" ? [fact.availability.value] : [],
+  );
+  const primaryEndpoint = availableValues.find(
+    (value) => value.type === "endpoint" && value.endpointId === "annualized-total-egfr-slope",
+  );
+  const falsePrimaryResult = availableValues.find(
+    (value) => value.type === "result" && value.endpointId === "annualized-total-egfr-slope",
+  );
+
+  assert.ok(primaryEndpoint?.type === "endpoint");
+  assert.equal(primaryEndpoint.role, "primary");
+  assert.equal(falsePrimaryResult, undefined);
+  assert.deepEqual(pmid41910396PrimaryResultGap, {
+    status: "source_observed_but_unrepresented",
+    sourceAnchorId: "pmid:41910396:abstract:primaryResult",
+    endpointId: "annualized-total-egfr-slope",
+    reason: "rct.v1 does not support the slope_difference measure type",
+    observed: {
+      iptacopanAnnualizedSlope: { value: -3.1, unit: "ml/min/1.73 m2/year" },
+      placeboAnnualizedSlope: { value: -6.12, unit: "ml/min/1.73 m2/year" },
+      betweenGroupDifference: {
+        value: 3.02,
+        unit: "ml/min/1.73 m2/year",
+        confidenceInterval: { lower: 2.02, upper: 4.01, levelPercent: 95 },
+        pValue: { operator: "less_than", value: 0.001 },
+      },
+    },
+  });
+  assert.ok(
+    pmid41910396EvidenceSet.anchors.some(
+      (anchor) => anchor.id === pmid41910396PrimaryResultGap.sourceAnchorId,
+    ),
+  );
+});
+
+test("composite endpoint and result use only their supporting abstract anchors", () => {
+  for (const factId of ["endpoint-kidney-failure", "result-kidney-failure-hr"]) {
+    const fact = pmid41910396FactSet.facts.find(
+      ({ id }) => id === `pmid:41910396:${factId}`,
+    );
+    assert.ok(fact);
+    assert.equal(fact.provenance.length, 1);
+    assert.notEqual(fact.provenance[0]?.target.id, "pmid:41910396:abstract:title");
+  }
 });
 
 test("rct.v1 boundary: randomized sample size per arm is not structurally representable", () => {

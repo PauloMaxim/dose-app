@@ -43,6 +43,8 @@ const excerpts = {
   arms: "Patients were randomly assigned, in a 1:1 ratio, to receive oral iptacopan (200 mg) or placebo twice daily.",
   endpoints:
     "The primary end point for the final analysis was the annualized total eGFR slope as estimated over a 24-month period.",
+  primaryResult:
+    "The annualized total eGFR slope was -3.10 ml per minute per 1.73 m2 per year with iptacopan, as compared with -6.12 ml per minute per 1.73 m2 per year with placebo (difference, 3.02 ml per minute per 1.73 m2 per year; 95% confidence interval [CI], 2.02 to 4.01; adjusted P<0.001).",
   composite:
     "Secondary end points included a composite kidney-failure end point (i.e., a sustained decline in eGFR of ≥30%, a sustained eGFR of <15 ml per minute per 1.73 m2, the initiation of maintenance dialysis, receipt of kidney transplant, or death from kidney failure), assessed in a time-to-event analysis.",
   population:
@@ -59,6 +61,7 @@ const excerptHashes: Record<keyof typeof excerpts, string> = {
   design: "c83d68870e42326d29f18ba06412e32e03eaaecf87ccae731e32dfe10c04139c",
   arms: "389520251b655430d93bab17eaf26ce673a51bbc98261e709ea466d717739f2e",
   endpoints: "77d219639a835a43c410ceadc8e5f55906ea97f77745c77a1d30488a312ea1f3",
+  primaryResult: "e2cf7ac4303a3fb2b4ea4f973e31d84d5b66f91b994e78bc7e8616f6c1b239c2",
   composite: "4cc5354398b7b30d1fb7c1c100df556a0b93a30437cca7b229e6128407b87fd0",
   population: "08ca26bb8b7107325de1301a8d9688e37bc953fa5f3bedc9c117476abe298eaa",
   compositeResult: "94d694aad5057967a7fd1b7f9fc509a203317cf7876395d06c59aba56d44cd02",
@@ -113,6 +116,25 @@ const armRefs = [
   { armId: "iptacopan", role: "intervention" as const },
   { armId: "placebo", role: "comparator" as const },
 ];
+
+// This source-observed result intentionally remains outside the validated rct.v1 FactSet.
+// The current grammar has no semantically correct estimate type for an eGFR slope difference.
+export const pmid41910396PrimaryResultGap = {
+  status: "source_observed_but_unrepresented",
+  sourceAnchorId: "pmid:41910396:abstract:primaryResult",
+  endpointId: "annualized-total-egfr-slope",
+  reason: "rct.v1 does not support the slope_difference measure type",
+  observed: {
+    iptacopanAnnualizedSlope: { value: -3.1, unit: "ml/min/1.73 m2/year" },
+    placeboAnnualizedSlope: { value: -6.12, unit: "ml/min/1.73 m2/year" },
+    betweenGroupDifference: {
+      value: 3.02,
+      unit: "ml/min/1.73 m2/year",
+      confidenceInterval: { lower: 2.02, upper: 4.01, levelPercent: 95 },
+      pValue: { operator: "less_than", value: 0.001 },
+    },
+  },
+} as const;
 
 const safetyEvent = (
   id: string,
@@ -202,7 +224,6 @@ export const pmid41910396ScientificFacts: ScientificFact[] = [
         "time to sustained eGFR decline ≥30%, sustained eGFR <15 ml/min/1.73 m2, maintenance dialysis, kidney transplant, or death from kidney failure",
       timepoint: { value: 24, unit: "month" },
     },
-    ["title"],
   ),
   sourceFact(
     "result-kidney-failure-hr",
@@ -224,7 +245,6 @@ export const pmid41910396ScientificFacts: ScientificFact[] = [
       },
       timepoint: { value: 24, unit: "month" },
     },
-    ["title"],
   ),
   safetyEvent("adverse-events-iptacopan", "adverse events", "iptacopan", 87),
   safetyEvent("adverse-events-placebo", "adverse events", "placebo", 89.1),
