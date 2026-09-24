@@ -4,6 +4,12 @@ import {
   sourceDocumentSchema,
   type ScientificFact,
 } from "./contracts";
+import {
+  rctScientificFactSetSchema,
+  scientificEvidenceSetSchema,
+  scientificInterpretationArtifactSchema,
+  scientificSourceSetSchema,
+} from "./editorial-pipeline";
 
 const articleId = "pmid:42717033";
 const sourceDocumentId = "pmid:42717033:abstract:v1";
@@ -284,3 +290,72 @@ export const pmid42717033ScientificFacts: ScientificFact[] = [
     identifier: "NCT04986202",
   }),
 ];
+
+export const pmid42717033SourceSet = scientificSourceSetSchema.parse({
+  version: "scientific-source-set.v1",
+  id: "pmid:42717033:sources:v1",
+  articleId,
+  sourceDocuments: [pmid42717033SourceDocument],
+  primarySourceDocumentIds: [sourceDocumentId],
+  coverage: { sourceKinds: ["abstract"], hasAuthorizedFullText: false },
+  validation: { status: "valid", validatedBy: "fixture-review-v1" },
+});
+
+export const pmid42717033EvidenceSet = scientificEvidenceSetSchema.parse({
+  version: "scientific-evidence-set.v1",
+  id: "pmid:42717033:evidence:v1",
+  articleId,
+  sourceSet: { id: pmid42717033SourceSet.id, version: pmid42717033SourceSet.version },
+  anchors: pmid42717033EvidenceAnchors,
+  validation: { status: "valid", validatedBy: "fixture-review-v1" },
+});
+
+export const pmid42717033FactSet = rctScientificFactSetSchema.parse({
+  version: "rct-scientific-fact-set.v1",
+  id: "pmid:42717033:rct-facts:v1",
+  articleId,
+  scientificGrammar: "rct.v1",
+  sourceSet: { id: pmid42717033SourceSet.id, version: pmid42717033SourceSet.version },
+  evidenceSet: { id: pmid42717033EvidenceSet.id, version: pmid42717033EvidenceSet.version },
+  facts: pmid42717033ScientificFacts,
+  validation: { status: "valid", validatedBy: "fixture-review-v1" },
+});
+
+export const pmid42717033Interpretation = scientificInterpretationArtifactSchema.parse({
+  version: "scientific-interpretation.v1",
+  id: "pmid:42717033:interpretation:v1",
+  articleId,
+  sourceSet: { id: pmid42717033SourceSet.id, version: pmid42717033SourceSet.version },
+  factSet: { id: pmid42717033FactSet.id, version: pmid42717033FactSet.version },
+  claims: [
+    {
+      id: "pmid:42717033:interpretation:coprimary-results",
+      claimType: "statistical_interpretation",
+      statement: "The reported confidence intervals for both co-primary results include zero.",
+      provenanceBasis: "deterministic_rule",
+      inputFactIds: ["pmid:42717033:result-kccq", "pmid:42717033:result-6mwd"],
+      externalContextReferences: [],
+      method: { name: "confidence-interval-zero-inclusion", version: "1" },
+      qualifiers: ["limited_to_reported_co_primary_results"],
+      prohibitedExtrapolations: ["do_not_infer_equivalence", "do_not_infer_individual_dose_effect"],
+      operationalStatus: "ready_for_review",
+      requiresHumanReview: true,
+      reviewStatus: "pending",
+    },
+    {
+      id: "pmid:42717033:interpretation:source-boundary",
+      claimType: "source_boundary",
+      statement: "This artifact is supported by the abstract source represented in the source set.",
+      provenanceBasis: "article_supported",
+      inputFactIds: ["pmid:42717033:design-randomized"],
+      externalContextReferences: [],
+      method: { name: "declared-source-coverage", version: "1" },
+      qualifiers: ["abstract_only"],
+      prohibitedExtrapolations: ["do_not_claim_full_text_review"],
+      operationalStatus: "ready_for_review",
+      requiresHumanReview: true,
+      reviewStatus: "pending",
+    },
+  ],
+  validation: { status: "valid", validatedBy: "fixture-review-v1" },
+});
