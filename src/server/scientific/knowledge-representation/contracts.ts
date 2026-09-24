@@ -45,7 +45,13 @@ export const sourceDocumentSchema = z
       "supplement",
       "guideline",
     ]),
-    provider: z.enum(["pubmed", "europe_pmc", "clinical_trials_gov", "licensed_provider"]),
+    provider: z.enum([
+      "pubmed",
+      "europe_pmc",
+      "crossref",
+      "clinical_trials_gov",
+      "licensed_provider",
+    ]),
     externalIdentifier: z.object({ scheme: id, value: id }).strict(),
     language,
     sourceVersion: availability(id),
@@ -70,6 +76,27 @@ export const sourceDocumentSchema = z
   })
   .strict()
   .superRefine((document, context) => {
+    if (
+      document.provider === "crossref" &&
+      document.sourceKind !== "metadata" &&
+      document.sourceKind !== "abstract"
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceKind"],
+        message: "Crossref source documents are limited to metadata and abstract records",
+      });
+    }
+    if (
+      document.provider === "crossref" &&
+      !["metadata_only", "abstract"].includes(document.accessScope)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["accessScope"],
+        message: "Crossref does not establish full-text or supplemental access",
+      });
+    }
     if (document.textStorage === "full_text" && document.accessScope !== "licensed_full_text") {
       context.addIssue({
         code: "custom",
