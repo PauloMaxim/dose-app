@@ -46,6 +46,10 @@ const pipeline = {
 const values = pmid42670964FactSet.facts.flatMap((fact) =>
   fact.availability.status === "available" ? [fact.availability.value] : [],
 );
+const validationCodes = (factSet: typeof pmid42670964FactSet) =>
+  new Set(
+    validateRCTScientificFactSet(factSet, pmid42670964EvidenceSet).errors.map(({ code }) => code),
+  );
 
 test("PMID 42670964 fixture satisfies every artifact schema", () => {
   assert.equal(sourceDocumentSchema.safeParse(pmid42670964SourceDocument).success, true);
@@ -156,7 +160,9 @@ test("rct.v1 represents the design, population, arms, allocation, follow-up, and
 });
 
 test("ischemic and bleeding outcomes remain separate comparative facts", () => {
-  const results = values.filter((value) => value.type === "result");
+  const results = values.flatMap((value) =>
+    value.type === "result" && value.estimate.measureType === "hazard_ratio" ? [value] : [],
+  );
   assert.deepEqual(
     results.map(({ endpointId, estimate }) => ({
       endpointId,
@@ -190,12 +196,24 @@ test("ischemic and bleeding outcomes remain separate comparative facts", () => {
   );
 });
 
-test("composite definitions stay on endpoints and are not assigned as component results", () => {
+test("composite endpoints have structured components without invented component results", () => {
   const endpoints = values.filter((value) => value.type === "endpoint");
   assert.equal(endpoints.length, 3);
   assert.match(
     endpoints.find(({ endpointId }) => endpointId === "net-adverse-clinical-events")?.measure ?? "",
     /composite of death.*myocardial infarction.*bleeding/,
+  );
+  assert.deepEqual(
+    endpoints
+      .find(({ endpointId }) => endpointId === "net-adverse-clinical-events")
+      ?.components?.map(({ name }) => name),
+    [
+      "death from any cause",
+      "myocardial infarction",
+      "stent thrombosis",
+      "stroke",
+      "BARC type 2, 3, or 5 bleeding",
+    ],
   );
   const resultEndpointIds = values.flatMap((value) =>
     value.type === "result" ? [value.endpointId] : [],
@@ -209,30 +227,35 @@ test("composite definitions stay on endpoints and are not assigned as component 
     assert.equal(resultEndpointIds.includes(component), false);
 });
 
-test("source-observed noninferiority data remain explicit gaps rather than false facts", () => {
+test("resolved structural gaps are facts while trade-off and superiority remain explicit boundaries", () => {
   const concepts = new Set<string>(pmid42670964ObservedGaps.map(({ concept }) => concept));
-  for (const concept of [
+  for (const concept of ["ischemia_bleeding_trade_off", "superiority_after_noninferiority"])
+    assert.equal(concepts.has(concept), true);
+  for (const resolved of [
     "noninferiority_design",
     "noninferiority_margin_direction_and_relationship",
     "primary_risk_difference",
     "arm_specific_event_estimates",
     "composite_endpoint_components",
     "time_to_event_analysis",
-    "ischemia_bleeding_trade_off",
   ])
-    assert.equal(concepts.has(concept), true);
+    assert.equal(concepts.has(resolved), false);
 
   const anchorIds = new Set(pmid42670964EvidenceSet.anchors.map(({ id }) => id));
   for (const gap of pmid42670964ObservedGaps)
     for (const sourceAnchorId of gap.sourceAnchorIds)
       assert.equal(anchorIds.has(sourceAnchorId), true);
 
-  const serializedFacts = JSON.stringify(pmid42670964FactSet.facts);
-  assert.equal(serializedFacts.includes("noninferiority_margin"), false);
-  assert.equal(serializedFacts.includes('"measureType":"risk_difference"'), false);
+  assert.ok(
+    values.some(
+      (value) => value.type === "result" && value.estimate.measureType === "risk_difference",
+    ),
+  );
+  assert.ok(values.some((value) => value.type === "statistical_hypothesis"));
+  assert.equal(values.filter((value) => value.type === "arm_estimate").length, 6);
 });
 
-test("rct.v1 rejects proposed noninferiority and composite-component fields", () => {
+test("risk difference, noninferiority, arm estimates, and time-to-event remain distinct", () => {
   const endpointFact = structuredClone(
     pmid42670964FactSet.facts.find(
       (fact) =>
@@ -241,39 +264,24 @@ test("rct.v1 rejects proposed noninferiority and composite-component fields", ()
         fact.availability.value.endpointId === "net-adverse-clinical-events",
     ),
   );
-  assert.ok(endpointFact?.availability.status === "available");
-  assert.equal(
-    scientificFactSchema.safeParse({
-      ...endpointFact,
-      availability: {
-        ...endpointFact.availability,
-        value: {
-          ...endpointFact.availability.value,
-          components: ["death", "myocardial infarction", "bleeding"],
-        },
-      },
-    }).success,
-    false,
+  assert.ok(
+    endpointFact?.availability.status === "available" &&
+      endpointFact.availability.value.type === "endpoint",
   );
-
-  const randomizedFact = structuredClone(
-    pmid42670964FactSet.facts.find(({ id }) => id.endsWith("design-randomized")),
+  assert.ok(endpointFact.availability.value.components);
+  const primary = values.find(
+    (value) => value.type === "result" && value.estimate.measureType === "risk_difference",
   );
-  assert.ok(randomizedFact?.availability.status === "available");
-  assert.equal(
-    scientificFactSchema.safeParse({
-      ...randomizedFact,
-      availability: {
-        status: "available",
-        value: {
-          type: "noninferiority_hypothesis",
-          margin: { value: 2.3, unit: "percentage point", direction: "upper" },
-          estimateMeasure: "risk_difference",
-        },
-      },
-    }).success,
-    false,
-  );
+  assert.ok(primary?.type === "result");
+  assert.equal(primary.analysisType, undefined);
+  const hypothesis = values.find((value) => value.type === "statistical_hypothesis");
+  assert.ok(hypothesis?.type === "statistical_hypothesis");
+  assert.equal(hypothesis.pValue.status, "available");
+  if (hypothesis.pValue.status === "available")
+    assert.equal(hypothesis.pValue.value.context, "noninferiority");
+  for (const result of values.filter((value) => value.type === "result"))
+    if (result.estimate.measureType === "hazard_ratio")
+      assert.equal(result.analysisType, "time_to_event");
 });
 
 test("interpretations create neither false equivalence nor false superiority nor net benefit", () => {
@@ -290,7 +298,7 @@ test("interpretations create neither false equivalence nor false superiority nor
     "preferable",
   ])
     assert.equal(statements.includes(prohibited), false);
-  assert.equal(statements.includes("noninferior"), false);
+  assert.equal(statements.includes("noninferiority"), true);
 
   for (const claim of pmid42670964Interpretation.claims) {
     assert.equal(claim.requiresHumanReview, true);
@@ -304,22 +312,119 @@ test("interpretations create neither false equivalence nor false superiority nor
 
 test("the complete requested gap matrix is classified", () => {
   assert.deepEqual(pmid42670964GapMatrix, {
-    noninferiorityDesign: "D_NEW_GRAMMAR_CONCEPT",
-    noninferiorityMargin: "D_NEW_GRAMMAR_CONCEPT",
-    marginDirection: "D_NEW_GRAMMAR_CONCEPT",
-    estimateVsMarginRelationship: "D_NEW_GRAMMAR_CONCEPT",
+    noninferiorityDesign: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+    noninferiorityMargin: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+    marginDirection: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+    estimateVsMarginRelationship: "A_REPRESENTABLE_AFTER_GENERALIZATION",
     superiorityAfterNoninferiority: "E_NOT_NEEDED_FOR_V1",
-    compositeEndpointComponents: "D_NEW_GRAMMAR_CONCEPT",
+    compositeEndpointComponents: "A_REPRESENTABLE_AFTER_GENERALIZATION",
     ischemicOutcomes: "A_REPRESENTABLE_WITHOUT_CHANGE",
     bleedingOutcomes: "A_REPRESENTABLE_WITHOUT_CHANGE",
     tradeOffRepresentation: "B_INTERPRETATION_ONLY",
-    armSpecificEstimates: "C_GENERALIZATION_NEEDED",
-    timeToEvent: "C_GENERALIZATION_NEEDED",
+    armSpecificEstimates: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+    timeToEvent: "A_REPRESENTABLE_AFTER_GENERALIZATION",
     randomizedSampleSize: "A_REPRESENTABLE_WITHOUT_CHANGE",
     confidenceInterval: "A_REPRESENTABLE_WITHOUT_CHANGE",
     pValue: "A_REPRESENTABLE_WITHOUT_CHANGE",
     followUp: "A_REPRESENTABLE_WITHOUT_CHANGE",
   });
+});
+
+test("fact-set validation resolves new arm, endpoint, result, and component references", () => {
+  const missingArm = structuredClone(pmid42670964FactSet);
+  const armEstimate = missingArm.facts.find(
+    (fact) =>
+      fact.availability.status === "available" && fact.availability.value.type === "arm_estimate",
+  );
+  assert.ok(
+    armEstimate?.availability.status === "available" &&
+      armEstimate.availability.value.type === "arm_estimate",
+  );
+  armEstimate.availability.value.armId = "missing-arm";
+  assert.ok(validationCodes(missingArm).has("FACT_ARM_NOT_FOUND"));
+
+  const missingEndpoint = structuredClone(pmid42670964FactSet);
+  const endpointEstimate = missingEndpoint.facts.find(
+    (fact) =>
+      fact.availability.status === "available" && fact.availability.value.type === "arm_estimate",
+  );
+  assert.ok(
+    endpointEstimate?.availability.status === "available" &&
+      endpointEstimate.availability.value.type === "arm_estimate",
+  );
+  endpointEstimate.availability.value.endpointId = "missing-endpoint";
+  assert.ok(validationCodes(missingEndpoint).has("FACT_ENDPOINT_NOT_FOUND"));
+
+  const inventedComponentResult = structuredClone(pmid42670964FactSet);
+  const comparativeResult = inventedComponentResult.facts.find(
+    (fact) => fact.availability.status === "available" && fact.availability.value.type === "result",
+  );
+  assert.ok(
+    comparativeResult?.availability.status === "available" &&
+      comparativeResult.availability.value.type === "result",
+  );
+  comparativeResult.availability.value.endpointId = "primary-stroke";
+  assert.ok(validationCodes(inventedComponentResult).has("FACT_ENDPOINT_NOT_FOUND"));
+
+  const duplicateComponent = structuredClone(pmid42670964FactSet);
+  const compositeEndpoints = duplicateComponent.facts.filter(
+    (fact) =>
+      fact.availability.status === "available" &&
+      fact.availability.value.type === "endpoint" &&
+      fact.availability.value.components,
+  );
+  assert.equal(compositeEndpoints.length, 2);
+  const first = compositeEndpoints[0];
+  const second = compositeEndpoints[1];
+  assert.ok(
+    first.availability.status === "available" &&
+      first.availability.value.type === "endpoint" &&
+      first.availability.value.components &&
+      second.availability.status === "available" &&
+      second.availability.value.type === "endpoint" &&
+      second.availability.value.components,
+  );
+  second.availability.value.components[0].componentId =
+    first.availability.value.components[0].componentId;
+  assert.ok(validationCodes(duplicateComponent).has("FACT_COMPOSITE_COMPONENT_ID_DUPLICATE"));
+});
+
+test("noninferiority validation audits linkage, compatibility, and decision conclusion", () => {
+  const mutateHypothesis = () => {
+    const factSet = structuredClone(pmid42670964FactSet);
+    const hypothesis = factSet.facts.find(
+      (fact) =>
+        fact.availability.status === "available" &&
+        fact.availability.value.type === "statistical_hypothesis",
+    );
+    assert.ok(
+      hypothesis?.availability.status === "available" &&
+        hypothesis.availability.value.type === "statistical_hypothesis",
+    );
+    return { factSet, hypothesis: hypothesis.availability.value };
+  };
+
+  const missingReference = mutateHypothesis();
+  missingReference.hypothesis.resultFactId = "missing-result";
+  assert.ok(validationCodes(missingReference.factSet).has("HYPOTHESIS_RESULT_NOT_FOUND"));
+
+  const wrongEndpoint = mutateHypothesis();
+  wrongEndpoint.hypothesis.endpointId = "key-secondary-ischemic";
+  assert.ok(validationCodes(wrongEndpoint.factSet).has("HYPOTHESIS_ENDPOINT_MISMATCH"));
+
+  const wrongMeasure = mutateHypothesis();
+  const result = wrongMeasure.factSet.facts.find(
+    ({ id }) => id === wrongMeasure.hypothesis.resultFactId,
+  );
+  assert.ok(
+    result?.availability.status === "available" && result.availability.value.type === "result",
+  );
+  result.availability.value.estimate.measureType = "hazard_ratio";
+  assert.ok(validationCodes(wrongMeasure.factSet).has("HYPOTHESIS_MEASURE_MISMATCH"));
+
+  const wrongConclusion = mutateHypothesis();
+  wrongConclusion.hypothesis.conclusion = "noninferiority_not_met";
+  assert.ok(validationCodes(wrongConclusion.factSet).has("HYPOTHESIS_CONCLUSION_INVALID"));
 });
 
 test("both earlier canary pipelines remain valid", () => {

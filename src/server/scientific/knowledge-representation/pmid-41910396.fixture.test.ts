@@ -119,7 +119,7 @@ test("the generic implementation contains no PMID-specific branch", () => {
   }
 });
 
-test("rct.v1 boundary: time-to-event analysis type is not structurally representable", () => {
+test("analysisType is optional and does not rewrite the earlier canary", () => {
   const result = structuredClone(
     pmid41910396FactSet.facts.find(
       (fact) =>
@@ -129,6 +129,7 @@ test("rct.v1 boundary: time-to-event analysis type is not structurally represent
     ),
   );
   assert.ok(result?.availability.status === "available");
+  assert.equal("analysisType" in result.availability.value, false);
   assert.equal(
     scientificFactSchema.safeParse({
       ...result,
@@ -137,7 +138,7 @@ test("rct.v1 boundary: time-to-event analysis type is not structurally represent
         value: { ...result.availability.value, analysisType: "time_to_event" },
       },
     }).success,
-    false,
+    true,
   );
 });
 
@@ -212,9 +213,7 @@ test("PMID 41910396 preserves individual arm slopes as an explicit remaining gap
 
 test("composite endpoint and result use only their supporting abstract anchors", () => {
   for (const factId of ["endpoint-kidney-failure", "result-kidney-failure-hr"]) {
-    const fact = pmid41910396FactSet.facts.find(
-      ({ id }) => id === `pmid:41910396:${factId}`,
-    );
+    const fact = pmid41910396FactSet.facts.find(({ id }) => id === `pmid:41910396:${factId}`);
     assert.ok(fact);
     assert.equal(fact.provenance.length, 1);
     assert.notEqual(fact.provenance[0]?.target.id, "pmid:41910396:abstract:title");

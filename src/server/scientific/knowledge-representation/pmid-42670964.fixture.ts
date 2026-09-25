@@ -117,51 +117,6 @@ const armRefs = [
 
 export const pmid42670964ObservedGaps = [
   {
-    concept: "noninferiority_design",
-    classification: "D_NEW_GRAMMAR_CONCEPT",
-    sourceAnchorIds: ["pmid:42670964:abstract:methodsEndpoints"],
-    reason: "rct.v1 study design features do not include a noninferiority hypothesis",
-  },
-  {
-    concept: "noninferiority_margin_direction_and_relationship",
-    classification: "D_NEW_GRAMMAR_CONCEPT",
-    sourceAnchorIds: [
-      "pmid:42670964:abstract:methodsEndpoints",
-      "pmid:42670964:abstract:primaryResult",
-      "pmid:42670964:abstract:conclusion",
-    ],
-    reason:
-      "rct.v1 cannot bind the 2.3-percentage-point margin or its direction to the risk difference and noninferiority conclusion",
-  },
-  {
-    concept: "primary_risk_difference",
-    classification: "C_GENERALIZATION_NEEDED",
-    sourceAnchorIds: ["pmid:42670964:abstract:primaryResult"],
-    reason: "risk_difference is not an rct.v1 result measure type",
-  },
-  {
-    concept: "arm_specific_event_estimates",
-    classification: "C_GENERALIZATION_NEEDED",
-    sourceAnchorIds: [
-      "pmid:42670964:abstract:primaryResult",
-      "pmid:42670964:abstract:ischemic",
-      "pmid:42670964:abstract:bleeding",
-    ],
-    reason: "rct.v1 results require at least two arms and cannot attach an estimate to one arm",
-  },
-  {
-    concept: "composite_endpoint_components",
-    classification: "D_NEW_GRAMMAR_CONCEPT",
-    sourceAnchorIds: ["pmid:42670964:abstract:methodsEndpoints", "pmid:42670964:abstract:ischemic"],
-    reason: "rct.v1 preserves component definitions only inside endpoint free text",
-  },
-  {
-    concept: "time_to_event_analysis",
-    classification: "C_GENERALIZATION_NEEDED",
-    sourceAnchorIds: ["pmid:42670964:abstract:ischemic", "pmid:42670964:abstract:bleeding"],
-    reason: "hazard ratios are representable but their time-to-event analysis type is not explicit",
-  },
-  {
     concept: "ischemia_bleeding_trade_off",
     classification: "B_INTERPRETATION_ONLY",
     sourceAnchorIds: ["pmid:42670964:abstract:ischemic", "pmid:42670964:abstract:bleeding"],
@@ -177,17 +132,17 @@ export const pmid42670964ObservedGaps = [
 ] as const;
 
 export const pmid42670964GapMatrix = {
-  noninferiorityDesign: "D_NEW_GRAMMAR_CONCEPT",
-  noninferiorityMargin: "D_NEW_GRAMMAR_CONCEPT",
-  marginDirection: "D_NEW_GRAMMAR_CONCEPT",
-  estimateVsMarginRelationship: "D_NEW_GRAMMAR_CONCEPT",
+  noninferiorityDesign: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+  noninferiorityMargin: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+  marginDirection: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+  estimateVsMarginRelationship: "A_REPRESENTABLE_AFTER_GENERALIZATION",
   superiorityAfterNoninferiority: "E_NOT_NEEDED_FOR_V1",
-  compositeEndpointComponents: "D_NEW_GRAMMAR_CONCEPT",
+  compositeEndpointComponents: "A_REPRESENTABLE_AFTER_GENERALIZATION",
   ischemicOutcomes: "A_REPRESENTABLE_WITHOUT_CHANGE",
   bleedingOutcomes: "A_REPRESENTABLE_WITHOUT_CHANGE",
   tradeOffRepresentation: "B_INTERPRETATION_ONLY",
-  armSpecificEstimates: "C_GENERALIZATION_NEEDED",
-  timeToEvent: "C_GENERALIZATION_NEEDED",
+  armSpecificEstimates: "A_REPRESENTABLE_AFTER_GENERALIZATION",
+  timeToEvent: "A_REPRESENTABLE_AFTER_GENERALIZATION",
   randomizedSampleSize: "A_REPRESENTABLE_WITHOUT_CHANGE",
   confidenceInterval: "A_REPRESENTABLE_WITHOUT_CHANGE",
   pValue: "A_REPRESENTABLE_WITHOUT_CHANGE",
@@ -262,6 +217,16 @@ export const pmid42670964ScientificFacts: ScientificFact[] = [
     measure:
       "composite of death from any cause, myocardial infarction, stent thrombosis, stroke, or BARC type 2, 3, or 5 bleeding",
     timepoint: { value: 24, unit: "month" },
+    components: [
+      { componentId: "primary-death-from-any-cause", name: "death from any cause" },
+      { componentId: "primary-myocardial-infarction", name: "myocardial infarction" },
+      { componentId: "primary-stent-thrombosis", name: "stent thrombosis" },
+      { componentId: "primary-stroke", name: "stroke" },
+      {
+        componentId: "primary-barc-2-3-or-5-bleeding",
+        name: "BARC type 2, 3, or 5 bleeding",
+      },
+    ],
   }),
   sourceFact("endpoint-ischemic", "ischemic", {
     type: "endpoint",
@@ -270,6 +235,90 @@ export const pmid42670964ScientificFacts: ScientificFact[] = [
     role: "secondary",
     measure:
       "composite of death from any cause, myocardial infarction, stent thrombosis, or stroke",
+    timepoint: { value: 24, unit: "month" },
+    components: [
+      { componentId: "ischemic-death-from-any-cause", name: "death from any cause" },
+      { componentId: "ischemic-myocardial-infarction", name: "myocardial infarction" },
+      { componentId: "ischemic-stent-thrombosis", name: "stent thrombosis" },
+      { componentId: "ischemic-stroke", name: "stroke" },
+    ],
+  }),
+  sourceFact("result-primary-risk-difference", "primaryResult", {
+    type: "result",
+    endpointId: "net-adverse-clinical-events",
+    arms: armRefs,
+    pooling: { status: "not_pooled" },
+    estimate: {
+      measureType: "risk_difference",
+      value: -0.1,
+      unit: "percentage_points",
+      confidenceInterval: {
+        status: "available",
+        value: { lower: -1.3, upper: 1.2, levelPercent: 90 },
+      },
+      pValue: { status: "not_applicable" },
+    },
+    timepoint: { value: 24, unit: "month" },
+  }),
+  sourceFact(
+    "hypothesis-primary-noninferiority",
+    "methodsEndpoints",
+    {
+      type: "statistical_hypothesis",
+      hypothesisType: "noninferiority",
+      endpointId: "net-adverse-clinical-events",
+      resultFactId: "pmid:42670964:result-primary-risk-difference",
+      effectMeasure: "risk_difference",
+      margin: { value: 2.3, unit: "percentage_points" },
+      direction: "upper_bound_below_margin",
+      confidenceLevelPercent: 90,
+      decisionRule: {
+        method: "confidence_interval_bound_vs_margin",
+        bound: "upper",
+        operator: "less_than",
+      },
+      conclusion: "noninferiority_met",
+      pValue: {
+        status: "available",
+        value: { operator: "equal", value: 0.001, context: "noninferiority" },
+      },
+    },
+    ["primaryResult", "conclusion"],
+  ),
+  sourceFact("arm-primary-clopidogrel", "primaryResult", {
+    type: "arm_estimate",
+    armId: "clopidogrel-monotherapy",
+    endpointId: "net-adverse-clinical-events",
+    eventCount: { status: "available", value: 80 },
+    denominator: { status: "available", value: 1601 },
+    estimate: { measureType: "percentage", value: 5.0, unit: "percent" },
+    timepoint: { value: 24, unit: "month" },
+  }),
+  sourceFact("arm-primary-dapt", "primaryResult", {
+    type: "arm_estimate",
+    armId: "extended-dapt",
+    endpointId: "net-adverse-clinical-events",
+    eventCount: { status: "available", value: 81 },
+    denominator: { status: "available", value: 1602 },
+    estimate: { measureType: "percentage", value: 5.1, unit: "percent" },
+    timepoint: { value: 24, unit: "month" },
+  }),
+  sourceFact("arm-ischemic-clopidogrel", "ischemic", {
+    type: "arm_estimate",
+    armId: "clopidogrel-monotherapy",
+    endpointId: "key-secondary-ischemic",
+    eventCount: { status: "available", value: 60 },
+    denominator: { status: "not_reported_in_source" },
+    estimate: { measureType: "percentage", value: 3.7, unit: "percent" },
+    timepoint: { value: 24, unit: "month" },
+  }),
+  sourceFact("arm-ischemic-dapt", "ischemic", {
+    type: "arm_estimate",
+    armId: "extended-dapt",
+    endpointId: "key-secondary-ischemic",
+    eventCount: { status: "available", value: 26 },
+    denominator: { status: "not_reported_in_source" },
+    estimate: { measureType: "percentage", value: 1.6, unit: "percent" },
     timepoint: { value: 24, unit: "month" },
   }),
   sourceFact("result-ischemic-hazard-ratio", "ischemic", {
@@ -288,6 +337,7 @@ export const pmid42670964ScientificFacts: ScientificFact[] = [
       pValue: { status: "available", value: { operator: "less_than", value: 0.001 } },
     },
     timepoint: { value: 24, unit: "month" },
+    analysisType: "time_to_event",
   }),
   sourceFact("endpoint-bleeding", "bleeding", {
     type: "endpoint",
@@ -312,6 +362,25 @@ export const pmid42670964ScientificFacts: ScientificFact[] = [
       },
       pValue: { status: "available", value: { operator: "less_than", value: 0.001 } },
     },
+    timepoint: { value: 24, unit: "month" },
+    analysisType: "time_to_event",
+  }),
+  sourceFact("arm-bleeding-clopidogrel", "bleeding", {
+    type: "arm_estimate",
+    armId: "clopidogrel-monotherapy",
+    endpointId: "key-secondary-bleeding",
+    eventCount: { status: "available", value: 28 },
+    denominator: { status: "not_reported_in_source" },
+    estimate: { measureType: "percentage", value: 1.8, unit: "percent" },
+    timepoint: { value: 24, unit: "month" },
+  }),
+  sourceFact("arm-bleeding-dapt", "bleeding", {
+    type: "arm_estimate",
+    armId: "extended-dapt",
+    endpointId: "key-secondary-bleeding",
+    eventCount: { status: "available", value: 65 },
+    denominator: { status: "not_reported_in_source" },
+    estimate: { measureType: "percentage", value: 4.1, unit: "percent" },
     timepoint: { value: 24, unit: "month" },
   }),
   sourceFact("serious-adverse-events", "safety", {
@@ -364,6 +433,29 @@ export const pmid42670964Interpretation = scientificInterpretationArtifactSchema
   sourceSet: { id: pmid42670964SourceSet.id, version: pmid42670964SourceSet.version },
   factSet: { id: pmid42670964FactSet.id, version: pmid42670964FactSet.version },
   claims: [
+    {
+      id: "pmid:42670964:interpretation:primary-noninferiority",
+      claimType: "statistical_interpretation",
+      statement:
+        "For the primary composite end point, the upper bound of the reported 90% confidence interval for the risk difference was below the prespecified 2.3-percentage-point margin, meeting the declared noninferiority rule.",
+      provenanceBasis: "deterministic_rule",
+      inputFactIds: [
+        "pmid:42670964:result-primary-risk-difference",
+        "pmid:42670964:hypothesis-primary-noninferiority",
+      ],
+      externalContextReferences: [],
+      method: { name: "noninferiority-upper-ci-bound-vs-margin", version: "1" },
+      qualifiers: ["primary_composite_endpoint", "noninferiority_only"],
+      prohibitedExtrapolations: [
+        "do_not_infer_equivalence",
+        "do_not_infer_superiority",
+        "do_not_infer_equal_treatments",
+        "do_not_infer_strategy_preference",
+      ],
+      operationalStatus: "ready_for_review",
+      requiresHumanReview: true,
+      reviewStatus: "pending",
+    },
     {
       id: "pmid:42670964:interpretation:ischemic-result",
       claimType: "statistical_interpretation",

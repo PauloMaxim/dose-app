@@ -266,7 +266,7 @@ export function validateScientificEvidenceSet(
 }
 
 type AvailableFact = ScientificFact & {
-  availability: { status: "available"; value: NonNullable<unknown> };
+  availability: Extract<ScientificFact["availability"], { status: "available" }>;
 };
 
 export function validateRCTScientificFactSet(
@@ -284,17 +284,13 @@ export function validateRCTScientificFactSet(
       "Scientific fact IDs must be unique.",
     );
   const available = factSet.facts.filter(
-    (fact) => fact.availability.status === "available",
-  ) as AvailableFact[];
+    (fact): fact is AvailableFact => fact.availability.status === "available",
+  );
   const arms = new Map<string, { comparator: boolean }>();
   const endpoints = new Set<string>();
+  const componentIds = new Set<string>();
   for (const fact of available) {
-    const value = fact.availability.value as {
-      type: string;
-      armId?: string;
-      comparator?: boolean;
-      endpointId?: string;
-    };
+    const value = fact.availability.value;
     if (value.type === "arm" && value.armId) {
       if (arms.has(value.armId))
         issues.error(
@@ -314,6 +310,20 @@ export function validateRCTScientificFactSet(
           "Endpoint identities must be unique within the fact set.",
         );
       endpoints.add(value.endpointId);
+    }
+  }
+  for (const fact of available) {
+    const value = fact.availability.value;
+    if (value.type !== "endpoint") continue;
+    for (const component of value.components ?? []) {
+      if (componentIds.has(component.componentId) || endpoints.has(component.componentId))
+        issues.error(
+          "FACT_COMPOSITE_COMPONENT_ID_DUPLICATE",
+          "facts",
+          `facts.${fact.id}.availability.value.components.${component.componentId}`,
+          "Composite component IDs must not collide with an endpoint or another component.",
+        );
+      componentIds.add(component.componentId);
     }
   }
   for (const fact of factSet.facts) {
@@ -356,9 +366,13 @@ export function validateRCTScientificFactSet(
     const referencedArms =
       value.type === "allocation_ratio"
         ? value.allocations.map(({ armId }) => ({ armId }))
-        : ["result", "safety_event", "safety_comparison"].includes(value.type)
-          ? (value as Extract<typeof value, { arms: unknown }>).arms
-          : [];
+        : value.type === "result" ||
+            value.type === "safety_event" ||
+            value.type === "safety_comparison"
+          ? value.arms
+          : value.type === "arm_estimate"
+            ? [{ armId: value.armId }]
+            : [];
     for (const reference of referencedArms)
       if (!arms.has(reference.armId))
         issues.error(
@@ -368,7 +382,10 @@ export function validateRCTScientificFactSet(
           "Referenced arm must resolve within the fact set.",
         );
     if (
-      (value.type === "result" || value.type === "endpoint_timepoint") &&
+      (value.type === "result" ||
+        value.type === "endpoint_timepoint" ||
+        value.type === "arm_estimate" ||
+        value.type === "statistical_hypothesis") &&
       !endpoints.has(value.endpointId)
     )
       issues.error(
@@ -377,6 +394,57 @@ export function validateRCTScientificFactSet(
         `facts.${fact.id}.availability.value.endpointId`,
         "Referenced endpoint must resolve within the fact set.",
       );
+    if (value.type === "statistical_hypothesis") {
+      const resultFact = available.find(({ id }) => id === value.resultFactId);
+      if (!resultFact || resultFact.availability.value.type !== "result") {
+        issues.error(
+          "HYPOTHESIS_RESULT_NOT_FOUND",
+          "facts",
+          `facts.${fact.id}.availability.value.resultFactId`,
+          "Noninferiority hypothesis must reference an available comparative result.",
+        );
+      } else {
+        const result = resultFact.availability.value;
+        if (result.endpointId !== value.endpointId)
+          issues.error(
+            "HYPOTHESIS_ENDPOINT_MISMATCH",
+            "facts",
+            `facts.${fact.id}.availability.value.endpointId`,
+            "Hypothesis and referenced result must use the same endpoint.",
+          );
+        if (
+          result.estimate.measureType !== value.effectMeasure ||
+          result.estimate.unit !== value.margin.unit
+        )
+          issues.error(
+            "HYPOTHESIS_MEASURE_MISMATCH",
+            "facts",
+            `facts.${fact.id}.availability.value.effectMeasure`,
+            "Hypothesis margin must use the referenced result's effect measure and unit.",
+          );
+        const interval = result.estimate.confidenceInterval;
+        if (
+          interval.status !== "available" ||
+          interval.value.levelPercent !== value.confidenceLevelPercent
+        )
+          issues.error(
+            "HYPOTHESIS_CONFIDENCE_INTERVAL_MISMATCH",
+            "facts",
+            `facts.${fact.id}.availability.value.confidenceLevelPercent`,
+            "Decision confidence level must match the referenced result interval.",
+          );
+        else {
+          const met = interval.value.upper < value.margin.value;
+          if (met !== (value.conclusion === "noninferiority_met"))
+            issues.error(
+              "HYPOTHESIS_CONCLUSION_INVALID",
+              "facts",
+              `facts.${fact.id}.availability.value.conclusion`,
+              "Noninferiority conclusion must follow the declared upper-bound decision rule.",
+            );
+        }
+      }
+    }
     if (value.type === "result" && value.pooling.status === "pooled")
       for (const armId of value.pooling.pooledArmIds) {
         const arm = arms.get(armId);

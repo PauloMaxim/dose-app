@@ -11,6 +11,7 @@ import {
   pmid42717033ScientificFacts,
   pmid42717033SourceDocument,
 } from "./pmid-42717033.fixture";
+import { pmid42670964ScientificFacts } from "./pmid-42670964.fixture";
 
 const availableResult = (endpointId: string) => {
   const fact = pmid42717033ScientificFacts.find(
@@ -292,6 +293,114 @@ test("arms accept only positive integer randomized sample sizes", () => {
   for (const invalid of [0, -1, 1.5, "238"]) {
     assert.equal(scientificFactSchema.safeParse(withSampleSize(invalid)).success, false);
   }
+});
+
+test("rct.v1 rejects malformed risk differences and invalid analysis typing", () => {
+  const riskDifference = structuredClone(
+    pmid42670964ScientificFacts.find(({ id }) => id.endsWith("result-primary-risk-difference")),
+  );
+  assert.ok(
+    riskDifference?.availability.status === "available" &&
+      riskDifference.availability.value.type === "result",
+  );
+  const value = riskDifference.availability.value;
+  for (const estimate of [
+    { ...value.estimate, unit: "ratio" },
+    {
+      ...value.estimate,
+      confidenceInterval: {
+        status: "available",
+        value: { lower: -1.3, upper: 1.2, levelPercent: 0 },
+      },
+    },
+    { ...value.estimate, measureType: "time_to_event" },
+  ])
+    assert.equal(
+      scientificFactSchema.safeParse({
+        ...riskDifference,
+        availability: { ...riskDifference.availability, value: { ...value, estimate } },
+      }).success,
+      false,
+    );
+  assert.equal(
+    scientificFactSchema.safeParse({
+      ...riskDifference,
+      availability: {
+        ...riskDifference.availability,
+        value: { ...value, analysisType: "time_to_event" },
+      },
+    }).success,
+    false,
+  );
+});
+
+test("arm estimates enforce single-arm semantics and reported numeric bounds", () => {
+  const armEstimate = structuredClone(
+    pmid42670964ScientificFacts.find(({ id }) => id.endsWith("arm-primary-clopidogrel")),
+  );
+  assert.ok(
+    armEstimate?.availability.status === "available" &&
+      armEstimate.availability.value.type === "arm_estimate",
+  );
+  const value = armEstimate.availability.value;
+  const invalidValues = [
+    { ...value, eventCount: { status: "available", value: -1 } },
+    {
+      ...value,
+      eventCount: { status: "available", value: 101 },
+      denominator: { status: "available", value: 100 },
+    },
+    { ...value, denominator: { status: "available", value: 0 } },
+    { ...value, estimate: { measureType: "percentage", value: 101, unit: "percent" } },
+    { ...value, arms: [{ armId: value.armId, role: "intervention" }] },
+  ];
+  for (const invalid of invalidValues)
+    assert.equal(
+      scientificFactSchema.safeParse({
+        ...armEstimate,
+        availability: { ...armEstimate.availability, value: invalid },
+      }).success,
+      false,
+    );
+});
+
+test("noninferiority is typed and cannot become equivalence or superiority", () => {
+  const hypothesis = structuredClone(
+    pmid42670964ScientificFacts.find(({ id }) => id.endsWith("hypothesis-primary-noninferiority")),
+  );
+  assert.ok(
+    hypothesis?.availability.status === "available" &&
+      hypothesis.availability.value.type === "statistical_hypothesis",
+  );
+  const value = hypothesis.availability.value;
+  for (const invalid of [
+    { ...value, margin: { value: -2.3, unit: "percentage_points" } },
+    { ...value, margin: { value: 2.3 } },
+    { ...value, confidenceLevelPercent: 100 },
+    { ...value, hypothesisType: "equivalence" },
+    { ...value, hypothesisType: "superiority" },
+  ])
+    assert.equal(
+      scientificFactSchema.safeParse({
+        ...hypothesis,
+        availability: { ...hypothesis.availability, value: invalid },
+      }).success,
+      false,
+    );
+});
+
+test("composite endpoint components reject duplicate IDs", () => {
+  const endpoint = structuredClone(
+    pmid42670964ScientificFacts.find(({ id }) => id.endsWith("endpoint-primary")),
+  );
+  assert.ok(
+    endpoint?.availability.status === "available" &&
+      endpoint.availability.value.type === "endpoint" &&
+      endpoint.availability.value.components,
+  );
+  const [component] = endpoint.availability.value.components;
+  endpoint.availability.value.components = [component, component];
+  assert.equal(scientificFactSchema.safeParse(endpoint).success, false);
 });
 
 test("source and derived facts have distinct, enforced provenance", () => {
