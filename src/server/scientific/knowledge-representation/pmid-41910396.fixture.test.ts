@@ -18,7 +18,7 @@ import {
   pmid41910396EvidenceSet,
   pmid41910396FactSet,
   pmid41910396Interpretation,
-  pmid41910396PrimaryResultGap,
+  pmid41910396ArmSlopeGap,
   pmid41910396SourceDocument,
   pmid41910396SourceSet,
 } from "./pmid-41910396.fixture";
@@ -141,79 +141,71 @@ test("rct.v1 boundary: time-to-event analysis type is not structurally represent
   );
 });
 
-test("rct.v1 boundary: an eGFR slope difference is not an available estimate type", () => {
-  const result = structuredClone(
-    pmid41910396FactSet.facts.find(
-      (fact) =>
-        fact.availability.status === "available" && fact.availability.value.type === "result",
-    ),
-  );
-  assert.ok(
-    result?.availability.status === "available" && result.availability.value.type === "result",
-  );
-  assert.equal(
-    scientificFactSchema.safeParse({
-      ...result,
-      availability: {
-        ...result.availability,
-        value: {
-          ...result.availability.value,
-          endpointId: "annualized-total-egfr-slope",
-          estimate: {
-            ...result.availability.value.estimate,
-            measureType: "slope_difference",
-            value: pmid41910396PrimaryResultGap.observed.betweenGroupDifference.value,
-            unit: pmid41910396PrimaryResultGap.observed.betweenGroupDifference.unit,
-            confidenceInterval: {
-              status: "available",
-              value:
-                pmid41910396PrimaryResultGap.observed.betweenGroupDifference.confidenceInterval,
-            },
-            pValue: {
-              status: "available",
-              value: pmid41910396PrimaryResultGap.observed.betweenGroupDifference.pValue,
-            },
-          },
-        },
-      },
-    }).success,
-    false,
-  );
-});
-
-test("PMID 41910396 records the source-observed primary result only as an rct.v1 gap", () => {
+test("PMID 41910396 represents the primary slope difference with source lineage", () => {
   const availableValues = pmid41910396FactSet.facts.flatMap((fact) =>
     fact.availability.status === "available" ? [fact.availability.value] : [],
   );
   const primaryEndpoint = availableValues.find(
     (value) => value.type === "endpoint" && value.endpointId === "annualized-total-egfr-slope",
   );
-  const falsePrimaryResult = availableValues.find(
+  const primaryResult = availableValues.find(
     (value) => value.type === "result" && value.endpointId === "annualized-total-egfr-slope",
   );
 
   assert.ok(primaryEndpoint?.type === "endpoint");
   assert.equal(primaryEndpoint.role, "primary");
-  assert.equal(falsePrimaryResult, undefined);
-  assert.deepEqual(pmid41910396PrimaryResultGap, {
+  assert.ok(primaryResult?.type === "result");
+  assert.deepEqual(primaryResult, {
+    type: "result",
+    endpointId: "annualized-total-egfr-slope",
+    arms: [
+      { armId: "iptacopan", role: "intervention" },
+      { armId: "placebo", role: "comparator" },
+    ],
+    pooling: { status: "not_pooled" },
+    estimate: {
+      measureType: "slope_difference",
+      value: 3.02,
+      unit: "ml/min/1.73 m2/year",
+      confidenceInterval: {
+        status: "available",
+        value: { lower: 2.02, upper: 4.01, levelPercent: 95 },
+      },
+      pValue: { status: "available", value: { operator: "less_than", value: 0.001 } },
+    },
+    timepoint: { value: 24, unit: "month" },
+  });
+  const resultFact = pmid41910396FactSet.facts.find(
+    ({ id }) => id === "pmid:41910396:result-egfr-slope-difference",
+  );
+  assert.ok(resultFact);
+  assert.deepEqual(resultFact.provenance, [
+    {
+      target: { kind: "evidence_anchor", id: "pmid:41910396:abstract:primaryResult" },
+      relation: "supports",
+    },
+  ]);
+  assert.ok(
+    pmid41910396EvidenceSet.anchors.some(
+      (anchor) => anchor.id === resultFact.provenance[0]?.target.id,
+    ),
+  );
+});
+
+test("PMID 41910396 preserves individual arm slopes as an explicit remaining gap", () => {
+  assert.deepEqual(pmid41910396ArmSlopeGap, {
     status: "source_observed_but_unrepresented",
     sourceAnchorId: "pmid:41910396:abstract:primaryResult",
     endpointId: "annualized-total-egfr-slope",
-    reason: "rct.v1 does not support the slope_difference measure type",
+    reason: "rct.v1 does not support non-comparative estimates for an individual arm",
     observed: {
       iptacopanAnnualizedSlope: { value: -3.1, unit: "ml/min/1.73 m2/year" },
       placeboAnnualizedSlope: { value: -6.12, unit: "ml/min/1.73 m2/year" },
-      betweenGroupDifference: {
-        value: 3.02,
-        unit: "ml/min/1.73 m2/year",
-        confidenceInterval: { lower: 2.02, upper: 4.01, levelPercent: 95 },
-        pValue: { operator: "less_than", value: 0.001 },
-      },
     },
   });
   assert.ok(
     pmid41910396EvidenceSet.anchors.some(
-      (anchor) => anchor.id === pmid41910396PrimaryResultGap.sourceAnchorId,
+      (anchor) => anchor.id === pmid41910396ArmSlopeGap.sourceAnchorId,
     ),
   );
 });
@@ -229,23 +221,14 @@ test("composite endpoint and result use only their supporting abstract anchors",
   }
 });
 
-test("rct.v1 boundary: randomized sample size per arm is not structurally representable", () => {
-  const arm = structuredClone(
-    pmid41910396FactSet.facts.find(
-      (fact) => fact.availability.status === "available" && fact.availability.value.type === "arm",
-    ),
+test("PMID 41910396 records randomized sample size separately on each arm", () => {
+  const arms = pmid41910396FactSet.facts.flatMap((fact) =>
+    fact.availability.status === "available" && fact.availability.value.type === "arm"
+      ? [fact.availability.value]
+      : [],
   );
-  assert.ok(arm?.availability.status === "available");
-  assert.equal(
-    scientificFactSchema.safeParse({
-      ...arm,
-      availability: {
-        ...arm.availability,
-        value: { ...arm.availability.value, randomizedSampleSize: 238 },
-      },
-    }).success,
-    false,
-  );
+  assert.equal(arms.find(({ armId }) => armId === "iptacopan")?.randomizedSampleSize, 238);
+  assert.equal(arms.find(({ armId }) => armId === "placebo")?.randomizedSampleSize, 239);
 });
 
 test("PMID 42717033 golden fixture remains valid", () => {

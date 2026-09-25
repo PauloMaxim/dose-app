@@ -224,6 +224,7 @@ const rctFactValueSchema = z.discriminatedUnion("type", [
       intervention: id,
       dose: availability(quantitySchema),
       comparator: z.boolean(),
+      randomizedSampleSize: z.number().int().positive().optional(),
     })
     .strict(),
   z
@@ -266,6 +267,7 @@ const rctFactValueSchema = z.discriminatedUnion("type", [
             "odds_ratio",
             "hazard_ratio",
             "proportion",
+            "slope_difference",
           ]),
           value: finiteNumber,
           unit: id,

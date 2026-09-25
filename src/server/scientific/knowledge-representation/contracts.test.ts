@@ -205,6 +205,95 @@ test("confidence intervals and p-values remain inside their estimate", () => {
   assert.equal(scientificFactSchema.safeParse(invalidPValue).success, false);
 });
 
+test("RCT grammar accepts a fully structured slope difference", () => {
+  const result = structuredClone(
+    pmid42717033ScientificFacts.find(
+      (fact) =>
+        fact.availability.status === "available" && fact.availability.value.type === "result",
+    ),
+  );
+  assert.ok(
+    result?.availability.status === "available" && result.availability.value.type === "result",
+  );
+  result.availability.value.estimate = {
+    measureType: "slope_difference",
+    value: 3.02,
+    unit: "ml/min/1.73 m2/year",
+    confidenceInterval: {
+      status: "available",
+      value: { lower: 2.02, upper: 4.01, levelPercent: 95 },
+    },
+    pValue: { status: "available", value: { operator: "less_than", value: 0.001 } },
+  };
+  const parsed = scientificFactSchema.safeParse(result);
+  assert.equal(parsed.success, true);
+  if (parsed.success && parsed.data.availability.status === "available") {
+    assert.deepEqual(parsed.data.availability.value, result.availability.value);
+    assert.deepEqual(parsed.data.provenance, result.provenance);
+  }
+});
+
+test("slope differences reject malformed confidence intervals and missing units", () => {
+  const result = structuredClone(
+    pmid42717033ScientificFacts.find(
+      (fact) =>
+        fact.availability.status === "available" && fact.availability.value.type === "result",
+    ),
+  );
+  assert.ok(
+    result?.availability.status === "available" && result.availability.value.type === "result",
+  );
+  const estimate = {
+    measureType: "slope_difference",
+    value: 3.02,
+    unit: "ml/min/1.73 m2/year",
+    confidenceInterval: {
+      status: "available",
+      value: { lower: 4.01, upper: 2.02, levelPercent: 95 },
+    },
+    pValue: { status: "available", value: { operator: "less_than", value: 0.001 } },
+  };
+  assert.equal(
+    scientificFactSchema.safeParse({
+      ...result,
+      availability: { ...result.availability, value: { ...result.availability.value, estimate } },
+    }).success,
+    false,
+  );
+  const { unit: _unit, ...withoutUnit } = estimate;
+  assert.equal(
+    scientificFactSchema.safeParse({
+      ...result,
+      availability: {
+        ...result.availability,
+        value: { ...result.availability.value, estimate: withoutUnit },
+      },
+    }).success,
+    false,
+  );
+});
+
+test("arms accept only positive integer randomized sample sizes", () => {
+  const arm = structuredClone(
+    pmid42717033ScientificFacts.find(
+      (fact) => fact.availability.status === "available" && fact.availability.value.type === "arm",
+    ),
+  );
+  assert.ok(arm?.availability.status === "available" && arm.availability.value.type === "arm");
+  const armValue = arm.availability.value;
+  const withSampleSize = (randomizedSampleSize: unknown) => ({
+    ...arm,
+    availability: {
+      ...arm.availability,
+      value: { ...armValue, randomizedSampleSize },
+    },
+  });
+  assert.equal(scientificFactSchema.safeParse(withSampleSize(238)).success, true);
+  for (const invalid of [0, -1, 1.5, "238"]) {
+    assert.equal(scientificFactSchema.safeParse(withSampleSize(invalid)).success, false);
+  }
+});
+
 test("source and derived facts have distinct, enforced provenance", () => {
   const source = pmid42717033ScientificFacts[0];
   for (const relation of ["supports", "qualifies", "contradicts", "defines"] as const) {
