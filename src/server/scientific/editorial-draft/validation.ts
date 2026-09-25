@@ -29,6 +29,7 @@ export type EditorialDraftValidationCode =
   | "CAUSALITY_NOT_SUPPORTED"
   | "THERAPEUTIC_RECOMMENDATION_NOT_AUTHORIZED"
   | "SOURCE_BOUNDARY_INCOMPATIBLE"
+  | "QUANTITATIVE_CLAIM_NOT_DECLARED"
   | "QUANTITATIVE_CLAIM_NOT_IN_FACT";
 
 export interface EditorialDraftValidationIssue {
@@ -182,6 +183,18 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
             "Every declared quantitative value and unit must occur in its grounded fact.",
           );
       }
+      const proseNumbers = claim.text.match(/(?<![\p{L}\d])-?\d+(?:[.,]\d+)?(?![\p{L}\d])/gu) ?? [];
+      const declaredNumbers = claim.quantitativeClaims.flatMap(({ value }) => [
+        String(value),
+        String(value).replace(".", ","),
+      ]);
+      for (const proseNumber of proseNumbers)
+        if (!declaredNumbers.includes(proseNumber.replace("−", "-")))
+          add(
+            "QUANTITATIVE_CLAIM_NOT_DECLARED",
+            `${path}.text`,
+            `Numeric prose value is not declared in quantitativeClaims: ${proseNumber}`,
+          );
       for (const interpretationId of claim.grounding.interpretationClaimIds)
         if (!interpretationIds.has(interpretationId))
           add(

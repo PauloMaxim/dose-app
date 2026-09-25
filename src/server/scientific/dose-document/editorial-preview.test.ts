@@ -3,13 +3,18 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { EDITORIAL_PREVIEWS, resolveEditorialPreview } from "./editorial-preview";
 
-test("editorial lab exposes exactly the three canaries and both Mitiperstat versions", () => {
+test("editorial lab exposes exactly the three canaries and all three Mitiperstat versions", () => {
   assert.deepEqual(Object.keys(EDITORIAL_PREVIEWS).sort(), ["41910396", "42670964", "42717033"]);
   const approved = resolveEditorialPreview("42717033", "approved");
   const generic = resolveEditorialPreview("42717033", "generic");
+  const experimental = resolveEditorialPreview("42717033", "experimental");
   assert.notEqual(approved.document.id, generic.document.id);
+  assert.notEqual(approved.document.id, experimental.document.id);
+  assert.notEqual(generic.document.id, experimental.document.id);
   assert.equal(approved.version, "approved");
   assert.equal(generic.version, "generic");
+  assert.equal(experimental.version, "experimental");
+  assert.match(experimental.document.id, /experimental-projection-v1$/);
 });
 
 test("Iptacopan and clopidogrel previews are generic composer documents", () => {
