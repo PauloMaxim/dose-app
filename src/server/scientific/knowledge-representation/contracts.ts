@@ -164,6 +164,19 @@ const durationSchema = z
   .object({ value: finiteNumber.positive(), unit: z.enum(["day", "week", "month", "year"]) })
   .strict();
 const quantitySchema = z.object({ value: finiteNumber, unit: id }).strict();
+const confidenceIntervalSchema = z
+  .object({
+    lower: finiteNumber,
+    upper: finiteNumber,
+    levelPercent: finiteNumber.gt(0).lt(100),
+  })
+  .strict();
+const pValueSchema = z
+  .object({
+    operator: z.enum(["equal", "less_than", "less_than_or_equal"]),
+    value: finiteNumber.min(0).max(1),
+  })
+  .strict();
 const armReferenceSchema = z
   .object({ armId: id, role: z.enum(["intervention", "comparator"]) })
   .strict();
@@ -247,8 +260,23 @@ const rctFactValueSchema = z.discriminatedUnion("type", [
       role: z.enum(["primary", "co_primary", "secondary"]),
       measure: id,
       timepoint: durationSchema,
+      components: z
+        .array(z.object({ componentId: id, name: id }).strict())
+        .min(2)
+        .optional(),
     })
-    .strict(),
+    .strict()
+    .superRefine((endpoint, context) => {
+      if (endpoint.components) {
+        const componentIds = endpoint.components.map(({ componentId }) => componentId);
+        if (new Set(componentIds).size !== componentIds.length)
+          context.addIssue({
+            code: "custom",
+            path: ["components"],
+            message: "composite endpoint component IDs must be unique",
+          });
+      }
+    }),
   z
     .object({
       type: z.literal("result"),
@@ -268,29 +296,16 @@ const rctFactValueSchema = z.discriminatedUnion("type", [
             "hazard_ratio",
             "proportion",
             "slope_difference",
+            "risk_difference",
           ]),
           value: finiteNumber,
           unit: id,
-          confidenceInterval: availability(
-            z
-              .object({
-                lower: finiteNumber,
-                upper: finiteNumber,
-                levelPercent: finiteNumber.min(0).max(100),
-              })
-              .strict(),
-          ),
-          pValue: availability(
-            z
-              .object({
-                operator: z.enum(["equal", "less_than", "less_than_or_equal"]),
-                value: finiteNumber.min(0).max(1),
-              })
-              .strict(),
-          ),
+          confidenceInterval: availability(confidenceIntervalSchema),
+          pValue: availability(pValueSchema),
         })
         .strict(),
       timepoint: durationSchema,
+      analysisType: z.literal("time_to_event").optional(),
     })
     .strict()
     .superRefine((result, context) => {
@@ -316,7 +331,90 @@ const rctFactValueSchema = z.discriminatedUnion("type", [
           });
         }
       }
+      if (
+        result.estimate.measureType === "risk_difference" &&
+        !["percentage_points", "proportion_difference"].includes(result.estimate.unit)
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["estimate", "unit"],
+          message: "risk difference requires a difference unit",
+        });
+      if (result.analysisType === "time_to_event" && result.estimate.measureType !== "hazard_ratio")
+        context.addIssue({
+          code: "custom",
+          path: ["analysisType"],
+          message: "time-to-event analysis requires a hazard-ratio estimate in rct.v1",
+        });
     }),
+  z
+    .object({
+      type: z.literal("arm_estimate"),
+      armId: id,
+      endpointId: id,
+      eventCount: availability(z.number().int().nonnegative()),
+      denominator: availability(z.number().int().positive()),
+      estimate: z.discriminatedUnion("measureType", [
+        z
+          .object({
+            measureType: z.literal("percentage"),
+            value: finiteNumber.min(0).max(100),
+            unit: z.literal("percent"),
+          })
+          .strict(),
+        z
+          .object({
+            measureType: z.literal("proportion"),
+            value: finiteNumber.min(0).max(1),
+            unit: z.literal("proportion"),
+          })
+          .strict(),
+        z
+          .object({
+            measureType: z.literal("continuous"),
+            value: finiteNumber,
+            unit: id,
+          })
+          .strict(),
+      ]),
+      timepoint: durationSchema,
+    })
+    .strict()
+    .superRefine((armEstimate, context) => {
+      if (
+        armEstimate.eventCount.status === "available" &&
+        armEstimate.denominator.status === "available" &&
+        armEstimate.eventCount.value > armEstimate.denominator.value
+      )
+        context.addIssue({
+          code: "custom",
+          path: ["eventCount"],
+          message: "event count cannot exceed its reported analysis denominator",
+        });
+    }),
+  z
+    .object({
+      type: z.literal("statistical_hypothesis"),
+      hypothesisType: z.literal("noninferiority"),
+      endpointId: id,
+      resultFactId: id,
+      effectMeasure: z.literal("risk_difference"),
+      margin: z
+        .object({ value: finiteNumber.positive(), unit: z.literal("percentage_points") })
+        .strict(),
+      direction: z.literal("upper_bound_below_margin"),
+      confidenceLevelPercent: finiteNumber.gt(0).lt(100),
+      decisionRule: z
+        .object({
+          method: z.literal("confidence_interval_bound_vs_margin"),
+          bound: z.literal("upper"),
+          operator: z.literal("less_than"),
+        })
+        .strict(),
+      conclusion: z.enum(["noninferiority_met", "noninferiority_not_met"]),
+      pValue: availability(pValueSchema.extend({ context: z.literal("noninferiority") }).strict()),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("safety_event"),
@@ -360,6 +458,8 @@ const factTypeSchema = z.enum([
   "endpoint_timepoint",
   "endpoint",
   "result",
+  "arm_estimate",
+  "statistical_hypothesis",
   "safety_event",
   "safety_comparison",
   "registry_identifier",
