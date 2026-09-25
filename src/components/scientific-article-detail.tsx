@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowLeft, ExternalLink } from "lucide-react";
+import type { ReactNode } from "react";
 import type { ScientificArticleDetail } from "@/server/scientific/article-detail";
 import { resolveDoseDocument } from "@/server/scientific/dose-document/pmid-42717033";
 import type { DoseDocument } from "@/server/scientific/dose-document/contracts";
@@ -7,25 +8,33 @@ import type { DoseDocument } from "@/server/scientific/dose-document/contracts";
 export function ScientificArticleDetailView({ article }: { article: ScientificArticleDetail }) {
   const dose = resolveDoseDocument(article);
   return dose ? (
-    <DoseArticle article={article} document={dose} />
+    <DoseDocumentArticleView article={article} document={dose} />
   ) : (
     <SourceOnlyArticle article={article} />
   );
 }
 
-function DoseArticle({
+export function DoseDocumentArticleView({
   article,
   document,
+  labHeader,
+  hideInternalValidation = false,
 }: {
   article: ScientificArticleDetail;
   document: DoseDocument;
+  labHeader?: ReactNode;
+  hideInternalValidation?: boolean;
 }) {
+  const openingSummary = hideInternalValidation
+    ? document.openingSummary.filter(({ id }) => id !== "opening-review-boundary")
+    : document.openingSummary;
   return (
     <main
       className="scientific-article-detail min-h-0 min-w-0 flex-1 overflow-y-auto bg-bg scrollbar-none"
       data-scientific-article-detail
     >
       <article className="mx-auto w-full max-w-6xl px-5 pb-20 pt-4 sm:px-8 lg:px-12">
+        {labHeader}
         <Link
           to="/artigos"
           aria-label="Voltar para artigos"
@@ -56,7 +65,7 @@ function DoseArticle({
             Para entender o estudo
           </h2>
           <div className="mt-6 max-w-3xl space-y-6 font-serif text-xl leading-[1.65] sm:text-[1.35rem]">
-            {document.openingSummary.map((paragraph) => (
+            {openingSummary.map((paragraph) => (
               <p key={paragraph.id}>{paragraph.text}</p>
             ))}
           </div>
@@ -141,7 +150,9 @@ function DoseArticle({
                     +
                   </span>
                 </summary>
-                <p className="pb-5 text-sm leading-7 text-muted">{item.body}</p>
+                <p className="pb-5 text-sm leading-7 text-muted">
+                  {hideInternalValidation ? item.body.split(" Revisão humana:")[0] : item.body}
+                </p>
               </details>
             ))}
           </div>

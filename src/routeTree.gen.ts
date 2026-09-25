@@ -31,6 +31,7 @@ import { Route as AuthResetPasswordRouteImport } from './routes/auth.reset-passw
 import { Route as AuthSignupRouteImport } from './routes/auth.signup'
 import { Route as AuthVerifyEmailRouteImport } from './routes/auth.verify-email'
 import { Route as EdicaoIdRouteImport } from './routes/edicao.$id'
+import { Route as InternalScientificPreviewRouteImport } from './routes/internal.scientific-preview'
 import { Route as LerIdRouteImport } from './routes/ler.$id'
 
 const AppRoute = AppRouteImport.update({
@@ -142,6 +143,12 @@ const EdicaoIdRoute = EdicaoIdRouteImport.update({
   path: '/edicao/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InternalScientificPreviewRoute =
+  InternalScientificPreviewRouteImport.update({
+    id: '/internal/scientific-preview',
+    path: '/internal/scientific-preview',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const LerIdRoute = LerIdRouteImport.update({
   id: '/ler/$id',
   path: '/ler/$id',
@@ -170,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/auth/signup': typeof AuthSignupRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/edicao/$id': typeof EdicaoIdRoute
+  '/internal/scientific-preview': typeof InternalScientificPreviewRoute
   '/ler/$id': typeof LerIdRoute
 }
 export interface FileRoutesByTo {
@@ -193,6 +201,7 @@ export interface FileRoutesByTo {
   '/auth/signup': typeof AuthSignupRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/edicao/$id': typeof EdicaoIdRoute
+  '/internal/scientific-preview': typeof InternalScientificPreviewRoute
   '/ler/$id': typeof LerIdRoute
   '/': typeof AppIndexRoute
 }
@@ -219,6 +228,7 @@ export interface FileRoutesById {
   '/auth/signup': typeof AuthSignupRoute
   '/auth/verify-email': typeof AuthVerifyEmailRoute
   '/edicao/$id': typeof EdicaoIdRoute
+  '/internal/scientific-preview': typeof InternalScientificPreviewRoute
   '/ler/$id': typeof LerIdRoute
   '/_app/': typeof AppIndexRoute
 }
@@ -246,6 +256,7 @@ export interface FileRouteTypes {
     | '/auth/signup'
     | '/auth/verify-email'
     | '/edicao/$id'
+    | '/internal/scientific-preview'
     | '/ler/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -269,6 +280,7 @@ export interface FileRouteTypes {
     | '/auth/signup'
     | '/auth/verify-email'
     | '/edicao/$id'
+    | '/internal/scientific-preview'
     | '/ler/$id'
     | '/'
   id:
@@ -294,6 +306,7 @@ export interface FileRouteTypes {
     | '/auth/signup'
     | '/auth/verify-email'
     | '/edicao/$id'
+    | '/internal/scientific-preview'
     | '/ler/$id'
     | '/_app/'
   fileRoutesById: FileRoutesById
@@ -315,6 +328,7 @@ export interface RootRouteChildren {
   AuthSignupRoute: typeof AuthSignupRoute
   AuthVerifyEmailRoute: typeof AuthVerifyEmailRoute
   EdicaoIdRoute: typeof EdicaoIdRoute
+  InternalScientificPreviewRoute: typeof InternalScientificPreviewRoute
   LerIdRoute: typeof LerIdRoute
 }
 
@@ -474,6 +488,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EdicaoIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/internal/scientific-preview': {
+      id: '/internal/scientific-preview'
+      path: '/internal/scientific-preview'
+      fullPath: '/internal/scientific-preview'
+      preLoaderRoute: typeof InternalScientificPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/ler/$id': {
       id: '/ler/$id'
       path: '/ler/$id'
@@ -521,6 +542,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthSignupRoute: AuthSignupRoute,
   AuthVerifyEmailRoute: AuthVerifyEmailRoute,
   EdicaoIdRoute: EdicaoIdRoute,
+  InternalScientificPreviewRoute: InternalScientificPreviewRoute,
   LerIdRoute: LerIdRoute,
 }
 export const routeTree = rootRouteImport
