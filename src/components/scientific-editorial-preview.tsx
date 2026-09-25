@@ -67,17 +67,26 @@ export function ScientificEditorialPreview({
                 Comparar versão
               </p>
               <div className="inline-flex rounded-full border border-border-strong p-1">
-                {(["approved", "generic"] as const).map((candidateVersion) => (
+                {(["approved", "generic", "experimental"] as const).map((candidateVersion) => (
                   <a
                     key={candidateVersion}
                     href={`/internal/scientific-preview?pmid=42717033&version=${candidateVersion}`}
                     aria-current={preview.version === candidateVersion ? "true" : undefined}
                     className={`min-h-10 rounded-full px-4 py-2 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-ring ${preview.version === candidateVersion ? "bg-teal text-bg" : "text-muted"}`}
                   >
-                    {candidateVersion === "approved" ? "Versão aprovada" : "Composer genérico"}
+                    {candidateVersion === "approved"
+                      ? "Versão aprovada"
+                      : candidateVersion === "generic"
+                        ? "Composer determinístico"
+                        : "Editorial profundo experimental"}
                   </a>
                 ))}
               </div>
+              {preview.version === "experimental" && (
+                <p className="mt-3 inline-flex rounded-full border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-fg">
+                  Editorial profundo — experimental — revisão pendente
+                </p>
+              )}
             </div>
           )}
 
@@ -94,7 +103,9 @@ export function ScientificEditorialPreview({
                 <dd>
                   {preview.version === "generic"
                     ? "generic deterministic RCT v1"
-                    : "manual aprovada v1"}
+                    : preview.version === "experimental"
+                      ? "ScientificEditorialDraft.v1 validado → projeção experimental"
+                      : "manual aprovada v1"}
                 </dd>
               </div>
               <div>

@@ -12,7 +12,9 @@ export const Route = createFileRoute("/internal/scientific-preview")({
     pmid: pmids.has(search.pmid as PreviewPmid)
       ? (search.pmid as PreviewPmid)
       : ("42717033" as const),
-    version: search.version === "generic" ? ("generic" as const) : ("approved" as const),
+    version: ["generic", "experimental"].includes(String(search.version))
+      ? (search.version as "generic" | "experimental")
+      : ("approved" as const),
   }),
   head: () => ({
     meta: [

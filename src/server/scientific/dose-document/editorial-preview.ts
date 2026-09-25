@@ -26,9 +26,29 @@ import type {
 import type { DoseDocument } from "./contracts";
 import { createPmid42717033DoseDocument } from "./pmid-42717033";
 import { composeRctDoseDocument } from "./rct-composer";
+import { pmid42717033ExperimentalDraft } from "../editorial-draft/pmid-42717033-experiment.fixture";
+import { projectScientificEditorialDraft } from "../editorial-draft/projection";
+import { validateScientificEditorialDraft } from "../editorial-draft/validation";
 
 export type PreviewPmid = "42717033" | "41910396" | "42670964";
-export type PreviewVersion = "approved" | "generic";
+export type PreviewVersion = "approved" | "generic" | "experimental";
+
+const experimentalValidation = validateScientificEditorialDraft({
+  draft: pmid42717033ExperimentalDraft,
+  sourceSet: pmid42717033SourceSet,
+  evidenceSet: pmid42717033EvidenceSet,
+  factSet: pmid42717033FactSet,
+  interpretationArtifact: pmid42717033Interpretation,
+  contextualMaterial: [],
+});
+if (!experimentalValidation.valid)
+  throw new Error(
+    `Invalid recorded editorial experiment: ${experimentalValidation.errors.map(({ code }) => code).join(", ")}`,
+  );
+const experimentalDocument = projectScientificEditorialDraft({
+  draft: pmid42717033ExperimentalDraft,
+  sourceSet: pmid42717033SourceSet,
+});
 
 function titleFromAnchors(
   anchors: typeof pmid41910396EvidenceAnchors | typeof pmid42670964EvidenceAnchors,
@@ -91,6 +111,7 @@ type PreviewDefinition = {
   interpretation: ScientificInterpretationArtifact;
   genericDocument: DoseDocument;
   approvedDocument?: DoseDocument;
+  experimentalDocument?: DoseDocument;
 };
 
 export const EDITORIAL_PREVIEWS: Record<PreviewPmid, PreviewDefinition> = {
@@ -108,6 +129,7 @@ export const EDITORIAL_PREVIEWS: Record<PreviewPmid, PreviewDefinition> = {
       metadata: articles["42717033"],
     }),
     approvedDocument: createPmid42717033DoseDocument(articles["42717033"]),
+    experimentalDocument,
   },
   "41910396": {
     pmid: "41910396",
@@ -147,6 +169,8 @@ export function resolveEditorialPreview(pmid: PreviewPmid, version: PreviewVersi
     document:
       pmid === "42717033" && version === "approved"
         ? (preview.approvedDocument as DoseDocument)
-        : preview.genericDocument,
+        : pmid === "42717033" && version === "experimental"
+          ? experimentalDocument
+          : preview.genericDocument,
   };
 }

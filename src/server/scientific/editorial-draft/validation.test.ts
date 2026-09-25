@@ -197,6 +197,12 @@ test("rejects a full-text claim when only the abstract is authorized", () => {
   expectCode(draft, "FULL_TEXT_NOT_AVAILABLE");
 });
 
+test("rejects a prose number that is not declared structurally", () => {
+  const draft = clone();
+  draft.blocks[0].claims[0].text += " O valor inventado foi 999.";
+  expectCode(draft, "QUANTITATIVE_CLAIM_NOT_DECLARED");
+});
+
 test("the schema prevents the editorial layer from bypassing review", () => {
   for (const mutation of [
     { requiresHumanReview: false, reviewStatus: "pending" },

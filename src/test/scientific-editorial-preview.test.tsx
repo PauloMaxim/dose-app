@@ -22,6 +22,7 @@ describe("scientific editorial preview lab", () => {
   it.each([
     ["42717033", "approved"],
     ["42717033", "generic"],
+    ["42717033", "experimental"],
     ["41910396", "generic"],
     ["42670964", "generic"],
   ] as const)("renders PMID %s in its %s version", (pmid, version) => {
@@ -47,10 +48,14 @@ describe("scientific editorial preview lab", () => {
     expect(screen.getByText(/full text autorizado: não/i)).toBeTruthy();
   });
 
-  it("offers approved and generic toggles only for Mitiperstat", () => {
+  it("offers all three versions only for Mitiperstat", () => {
     const { rerender } = render(<ScientificEditorialPreview pmid="42717033" version="approved" />);
     expect(screen.getByRole("link", { name: "Versão aprovada" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Composer genérico" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Composer determinístico" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Editorial profundo experimental" })).toBeTruthy();
+
+    rerender(<ScientificEditorialPreview pmid="42717033" version="experimental" />);
+    expect(screen.getByText("Editorial profundo — experimental — revisão pendente")).toBeTruthy();
 
     rerender(<ScientificEditorialPreview pmid="42670964" version="generic" />);
     expect(screen.queryByRole("link", { name: "Versão aprovada" })).toBeNull();
