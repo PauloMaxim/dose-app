@@ -117,22 +117,16 @@ const armRefs = [
   { armId: "placebo", role: "comparator" as const },
 ];
 
-// This source-observed result intentionally remains outside the validated rct.v1 FactSet.
-// The current grammar has no semantically correct estimate type for an eGFR slope difference.
-export const pmid41910396PrimaryResultGap = {
+// rct.v1 results are comparative (at least two arm references), so the source-observed
+// arm-specific slopes remain anchored here rather than being forced into that shape.
+export const pmid41910396ArmSlopeGap = {
   status: "source_observed_but_unrepresented",
   sourceAnchorId: "pmid:41910396:abstract:primaryResult",
   endpointId: "annualized-total-egfr-slope",
-  reason: "rct.v1 does not support the slope_difference measure type",
+  reason: "rct.v1 does not support non-comparative estimates for an individual arm",
   observed: {
     iptacopanAnnualizedSlope: { value: -3.1, unit: "ml/min/1.73 m2/year" },
     placeboAnnualizedSlope: { value: -6.12, unit: "ml/min/1.73 m2/year" },
-    betweenGroupDifference: {
-      value: 3.02,
-      unit: "ml/min/1.73 m2/year",
-      confidenceInterval: { lower: 2.02, upper: 4.01, levelPercent: 95 },
-      pValue: { operator: "less_than", value: 0.001 },
-    },
   },
 } as const;
 
@@ -181,22 +175,34 @@ export const pmid41910396ScientificFacts: ScientificFact[] = [
     value: { value: 1, unit: "g/g" },
   }),
   sourceFact("sample-size", "population", { type: "population_sample_size", value: 477 }),
-  sourceFact("arm-iptacopan", "arms", {
-    type: "arm",
-    armId: "iptacopan",
-    label: "oral iptacopan 200 mg twice daily",
-    intervention: "iptacopan",
-    dose: { status: "available", value: { value: 200, unit: "mg" } },
-    comparator: false,
-  }),
-  sourceFact("arm-placebo", "arms", {
-    type: "arm",
-    armId: "placebo",
-    label: "placebo twice daily",
-    intervention: "placebo",
-    dose: { status: "not_applicable" },
-    comparator: true,
-  }),
+  sourceFact(
+    "arm-iptacopan",
+    "arms",
+    {
+      type: "arm",
+      armId: "iptacopan",
+      label: "oral iptacopan 200 mg twice daily",
+      intervention: "iptacopan",
+      dose: { status: "available", value: { value: 200, unit: "mg" } },
+      comparator: false,
+      randomizedSampleSize: 238,
+    },
+    ["population"],
+  ),
+  sourceFact(
+    "arm-placebo",
+    "arms",
+    {
+      type: "arm",
+      armId: "placebo",
+      label: "placebo twice daily",
+      intervention: "placebo",
+      dose: { status: "not_applicable" },
+      comparator: true,
+      randomizedSampleSize: 239,
+    },
+    ["population"],
+  ),
   sourceFact("allocation", "arms", {
     type: "allocation_ratio",
     allocations: [
@@ -210,6 +216,23 @@ export const pmid41910396ScientificFacts: ScientificFact[] = [
     name: "annualized total eGFR slope",
     role: "primary",
     measure: "annualized total eGFR slope over the final analysis period",
+    timepoint: { value: 24, unit: "month" },
+  }),
+  sourceFact("result-egfr-slope-difference", "primaryResult", {
+    type: "result",
+    endpointId: "annualized-total-egfr-slope",
+    arms: armRefs,
+    pooling: { status: "not_pooled" },
+    estimate: {
+      measureType: "slope_difference",
+      value: 3.02,
+      unit: "ml/min/1.73 m2/year",
+      confidenceInterval: {
+        status: "available",
+        value: { lower: 2.02, upper: 4.01, levelPercent: 95 },
+      },
+      pValue: { status: "available", value: { operator: "less_than", value: 0.001 } },
+    },
     timepoint: { value: 24, unit: "month" },
   }),
   sourceFact(
