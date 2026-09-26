@@ -9,13 +9,20 @@ const scientificPilotEnvSchema = z.object({
   SCIENTIFIC_INGESTION_TOKEN: z.string().min(32),
   SCIENTIFIC_PILOT_QUERY: z.string().trim().min(3).max(300),
 });
-const authEnvSchema = serverEnvSchema.pick({ VITE_SUPABASE_URL: true, VITE_SUPABASE_PUBLISHABLE_KEY: true });
+const scientificOperationEnvSchema = scientificPilotEnvSchema.pick({
+  SCIENTIFIC_INGESTION_TOKEN: true,
+});
+const authEnvSchema = serverEnvSchema.pick({
+  VITE_SUPABASE_URL: true,
+  VITE_SUPABASE_PUBLISHABLE_KEY: true,
+});
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
 export type AuthEnv = z.infer<typeof authEnvSchema>;
 
 function parseEnv<T extends z.ZodType>(schema: T): z.infer<T> {
-  if (typeof window !== "undefined") throw new Error("Server environment cannot be read in the browser.");
+  if (typeof window !== "undefined")
+    throw new Error("Server environment cannot be read in the browser.");
   const result = schema.safeParse(process.env);
   if (!result.success) {
     const names = result.error.issues.map((issue) => issue.path.join(".")).join(", ");
@@ -36,4 +43,9 @@ export function getAuthEnv(): AuthEnv {
 /** Dedicated operational authorization and server-owned query for the one-shot pilot. */
 export function getScientificPilotEnv() {
   return parseEnv(scientificPilotEnvSchema);
+}
+
+/** Shared authorization only; this does not initialize Supabase or any provider. */
+export function getScientificOperationEnv() {
+  return parseEnv(scientificOperationEnvSchema);
 }
