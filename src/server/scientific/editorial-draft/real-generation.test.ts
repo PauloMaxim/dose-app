@@ -298,7 +298,7 @@ test("an incomplete response records sanitized metrics and is never parsed as a 
   assert.equal(result.usage?.reasoningTokens, 24_000);
 });
 
-test("invalid model output returns validator errors and never exposes a draft", async () => {
+test("schema-valid but scientifically invalid output remains an explicitly rejected candidate", async () => {
   const invalid = structuredClone(pmid42717033ExperimentalDraft);
   invalid.blocks[0].claims[0].grounding.factIds = ["unknown-fact"];
   const result = await runRealEditorialGeneration(
@@ -314,7 +314,28 @@ test("invalid model output returns validator errors and never exposes a draft", 
   );
   assert.equal(result.validationStatus, "rejected");
   assert.equal(result.draft, undefined);
+  assert.equal(result.candidateDraft?.requiresHumanReview, true);
+  assert.equal(result.candidateDraft?.reviewStatus, "pending");
   assert.ok(result.validationErrors.some(({ code }) => code === "FACT_NOT_FOUND"));
+});
+
+test("schema-invalid model output never exposes a draft or typed candidate", async () => {
+  const invalid = { ...structuredClone(pmid42717033ExperimentalDraft), reviewStatus: "approved" };
+  const result = await runRealEditorialGeneration(
+    { articleId: SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID, confirmRealGeneration: true },
+    {
+      env: { OPENAI_API_KEY: "test-only" },
+      transport: {
+        async create() {
+          return { output_text: JSON.stringify(invalid) };
+        },
+      },
+    },
+  );
+  assert.equal(result.validationStatus, "rejected");
+  assert.equal(result.draft, undefined);
+  assert.equal(result.candidateDraft, undefined);
+  assert.ok(result.validationErrors.some(({ code }) => code === "DRAFT_SCHEMA_INVALID"));
 });
 
 test("explicit confirmation and the single-canary allowlist gate all provider calls", async () => {

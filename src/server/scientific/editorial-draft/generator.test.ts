@@ -43,7 +43,23 @@ test("generation returns a structured validation failure and never repairs outpu
     new DeterministicScientificEditorialProvider(invalid),
   ).generate(input);
   assert.equal(result.ok, false);
-  if (!result.ok) assert.ok(result.errors.some(({ code }) => code === "FACT_NOT_FOUND"));
+  if (!result.ok) {
+    assert.ok(result.errors.some(({ code }) => code === "FACT_NOT_FOUND"));
+    assert.equal(result.candidateDraft?.requiresHumanReview, true);
+    assert.equal(result.candidateDraft?.reviewStatus, "pending");
+  }
+});
+
+test("schema-invalid provider output is rejected without a typed candidate", async () => {
+  const invalid = { ...structuredClone(pmid42717033ExperimentalDraft), reviewStatus: "approved" };
+  const result = await new ValidatedScientificEditorialDraftGenerator(
+    new DeterministicScientificEditorialProvider(invalid),
+  ).generate(input);
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.ok(result.errors.some(({ code }) => code === "DRAFT_SCHEMA_INVALID"));
+    assert.equal(result.candidateDraft, undefined);
+  }
 });
 
 test("validated draft projects generically to DoseDocument", () => {

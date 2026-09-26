@@ -4,7 +4,11 @@ import type {
   ScientificInterpretationArtifact,
   ScientificSourceSet,
 } from "../knowledge-representation/editorial-pipeline";
-import type { ContextualScientificMaterial, ScientificEditorialDraft } from "./contracts";
+import {
+  scientificEditorialDraftSchema,
+  type ContextualScientificMaterial,
+  type ScientificEditorialDraft,
+} from "./contracts";
 import type { ScientificEditorialProvider } from "./provider.server";
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION, SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT } from "./prompt";
 import { validateScientificEditorialDraft, type EditorialDraftValidationIssue } from "./validation";
@@ -25,23 +29,35 @@ export interface ScientificEditorialDraftGenerator {
 
 export type EditorialGenerationResult =
   | { ok: true; draft: ScientificEditorialDraft }
-  | { ok: false; errors: EditorialDraftValidationIssue[] };
+  | {
+      ok: false;
+      errors: EditorialDraftValidationIssue[];
+      /** Schema-valid provider output that remains scientifically rejected and pending review. */
+      candidateDraft?: ScientificEditorialDraft;
+    };
 
 /** Generation is untrusted until the independent contract validator accepts the output. */
 export class ValidatedScientificEditorialDraftGenerator {
   constructor(private readonly provider: ScientificEditorialProvider) {}
 
   async generate(input: GenerateEditorialDraftInput): Promise<EditorialGenerationResult> {
-    const draft = await this.provider.generate({
+    const output = await this.provider.generate({
       promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
       systemPrompt: SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
       input,
     });
+    const parsed = scientificEditorialDraftSchema.safeParse(output);
     const report = validateScientificEditorialDraft({
-      draft,
+      draft: output,
       ...input,
     });
-    if (!report.valid) return { ok: false, errors: report.errors };
-    return { ok: true, draft: draft as ScientificEditorialDraft };
+    if (!report.valid)
+      return {
+        ok: false,
+        errors: report.errors,
+        ...(parsed.success ? { candidateDraft: parsed.data } : {}),
+      };
+    if (!parsed.success) return { ok: false, errors: report.errors };
+    return { ok: true, draft: parsed.data };
   }
 }

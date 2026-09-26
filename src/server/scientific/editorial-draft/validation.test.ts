@@ -203,6 +203,61 @@ test("rejects a prose number that is not declared structurally", () => {
   expectCode(draft, "QUANTITATIVE_CLAIM_NOT_DECLARED");
 });
 
+test("accepts estimate, interval bounds, confidence level, p value, and timepoint from one result fact", () => {
+  const draft = clone();
+  const claim = draft.blocks[0].claims[0];
+  claim.text = "A estimativa foi −1,4 ponto (IC 95% de −3,9 a 1,2; p=0,29) em 16 semanas.";
+  claim.grounding.factIds = ["pmid:42717033:result-kccq"];
+  claim.quantitativeClaims = [
+    { value: -1.4, unit: "point", factId: "pmid:42717033:result-kccq" },
+    { value: -3.9, unit: "point", factId: "pmid:42717033:result-kccq" },
+    { value: 1.2, unit: "point", factId: "pmid:42717033:result-kccq" },
+    { value: 95, unit: "percent", factId: "pmid:42717033:result-kccq" },
+    { value: 0.29, unit: "p_value", factId: "pmid:42717033:result-kccq" },
+    { value: 16, unit: "week", factId: "pmid:42717033:result-kccq" },
+  ];
+  assert.deepEqual(validate(draft), { valid: true, errors: [] });
+});
+
+test("accepts typed sample size, percentage, dose, and duration quantities", () => {
+  const draft = clone();
+  const claim = draft.blocks[0].claims[0];
+  claim.text = "Foram 711 participantes, 45% mulheres, com dose de 2,5 mg por 48 semanas.";
+  claim.grounding.factIds = [
+    "pmid:42717033:sample-size",
+    "pmid:42717033:women",
+    "pmid:42717033:arm-low-dose",
+    "pmid:42717033:treatment-duration",
+  ];
+  claim.quantitativeClaims = [
+    { value: 711, unit: "participant", factId: "pmid:42717033:sample-size" },
+    { value: 45, unit: "percent", factId: "pmid:42717033:women" },
+    { value: 2.5, unit: "mg", factId: "pmid:42717033:arm-low-dose" },
+    { value: 48, unit: "week", factId: "pmid:42717033:treatment-duration" },
+  ];
+  assert.deepEqual(validate(draft), { valid: true, errors: [] });
+});
+
+test("rejects a number and unit drawn from different semantic fields of the same fact", () => {
+  const draft = clone();
+  const claim = draft.blocks[0].claims[0];
+  claim.text = "O resultado foi 95 pontos.";
+  claim.grounding.factIds = ["pmid:42717033:result-kccq"];
+  claim.quantitativeClaims = [{ value: 95, unit: "point", factId: "pmid:42717033:result-kccq" }];
+  expectCode(draft, "QUANTITATIVE_CLAIM_NOT_IN_FACT");
+});
+
+test("preserves a Unicode minus sign when matching prose to declarations", () => {
+  const draft = clone();
+  const claim = draft.blocks[0].claims[0];
+  claim.text = "A diferença foi −1.4 ponto.";
+  claim.grounding.factIds = ["pmid:42717033:result-kccq"];
+  claim.quantitativeClaims = [{ value: 1.4, unit: "point", factId: "pmid:42717033:result-kccq" }];
+  const report = validate(draft);
+  assert.ok(report.errors.some(({ code }) => code === "QUANTITATIVE_CLAIM_NOT_DECLARED"));
+  assert.ok(report.errors.some(({ code }) => code === "QUANTITATIVE_CLAIM_NOT_IN_FACT"));
+});
+
 test("the schema prevents the editorial layer from bypassing review", () => {
   for (const mutation of [
     { requiresHumanReview: false, reviewStatus: "pending" },
