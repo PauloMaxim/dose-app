@@ -8,15 +8,18 @@ injected transport keeps tests offline and the production transport is a small s
 adapter. The unrelated legacy xAI/Grok rewrite path remains isolated because it uses free-form chat
 output, a different purpose and a client-adjacent module.
 
-The selected default model is `gpt-4.1-mini`: it supports structured output and offers a deliberate
-balance of instruction following, multilingual scientific prose and bounded cost. The server-only
-`SCIENTIFIC_EDITORIAL_MODEL` setting can replace it without changing provider code.
+The selected default model is `gpt-5.6-sol`. It supports the Responses API and Structured Outputs and
+was chosen for the first experiment to prioritize reasoning quality and scientific writing. This is a
+deliberate quality-evaluation choice: cost is not yet being optimized in this phase. After the
+editorial benchmark, more economical models can be compared against that quality reference. The
+server-only `SCIENTIFIC_EDITORIAL_MODEL` setting can replace the model without changing provider
+code.
 
 ## Configuration and failure behavior
 
 - `OPENAI_API_KEY` is required and read only when the explicit operation runs. If absent, the
   operation fails closed with a structured `configuration` error before transport invocation.
-- `SCIENTIFIC_EDITORIAL_MODEL` defaults to `gpt-4.1-mini`.
+- `SCIENTIFIC_EDITORIAL_MODEL` defaults to `gpt-5.6-sol`.
 - `SCIENTIFIC_EDITORIAL_TIMEOUT_MS` defaults to 45,000 ms and aborts the single request.
 - `SCIENTIFIC_EDITORIAL_MAX_INPUT_CHARS` defaults to 120,000 characters.
 - `SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS` defaults to 8,000 tokens.

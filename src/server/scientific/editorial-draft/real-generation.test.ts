@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { scientificEditorialDraftJsonSchema } from "./contracts";
+import { DEFAULT_SCIENTIFIC_EDITORIAL_MODEL, loadScientificEditorialConfig } from "./config.server";
 import { pmid42717033ExperimentalDraft } from "./pmid-42717033-experiment.fixture";
 import {
   OpenAIScientificEditorialProvider,
@@ -39,6 +40,20 @@ const config = {
   maxInputCharacters: 120_000,
   maxOutputTokens: 8_000,
 };
+
+test("editorial config defaults to gpt-5.6-sol without invoking a provider", () => {
+  const loaded = loadScientificEditorialConfig({ OPENAI_API_KEY: "test-only" });
+  assert.equal(DEFAULT_SCIENTIFIC_EDITORIAL_MODEL, "gpt-5.6-sol");
+  assert.equal(loaded.model, "gpt-5.6-sol");
+});
+
+test("SCIENTIFIC_EDITORIAL_MODEL overrides the default without invoking a provider", () => {
+  const loaded = loadScientificEditorialConfig({
+    OPENAI_API_KEY: "test-only",
+    SCIENTIFIC_EDITORIAL_MODEL: "approved-test-model",
+  });
+  assert.equal(loaded.model, "approved-test-model");
+});
 
 test("missing API key fails closed before transport invocation", async () => {
   let calls = 0;
@@ -82,7 +97,9 @@ test("OpenAI adapter requests strict schema and parses structured output", async
   assert.equal(captured?.max_output_tokens, 8_000);
   const blockSchema = (
     scientificEditorialDraftJsonSchema as {
-      properties: { blocks: { items: { required: string[]; properties: Record<string, unknown> } } };
+      properties: {
+        blocks: { items: { required: string[]; properties: Record<string, unknown> } };
+      };
     }
   ).properties.blocks.items;
   assert.ok(blockSchema.required.includes("title"));
@@ -236,7 +253,7 @@ test("the authorized payload contains no golden or preview material", async () =
 });
 
 test("imports, builds, and preview source have no implicit generation or client secret", async () => {
-  let calls = 0;
+  const calls = 0;
   await import("./real-generation.server");
   assert.equal(calls, 0);
   const [previewRoute, previewComponent, clientAi, routeSource] = await Promise.all([
