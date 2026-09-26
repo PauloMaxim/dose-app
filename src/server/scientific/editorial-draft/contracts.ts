@@ -122,6 +122,36 @@ export const scientificEditorialDraftSchema = z
   })
   .strict();
 
+type JsonSchemaNode = Record<string, unknown>;
+
+function strictProviderSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(strictProviderSchema);
+  if (!node || typeof node !== "object") return node;
+  const source = node as JsonSchemaNode;
+  const output = Object.fromEntries(
+    Object.entries(source)
+      .filter(([key]) => key !== "$schema" && key !== "default")
+      .map(([key, value]) => [key, strictProviderSchema(value)]),
+  ) as JsonSchemaNode;
+  if (source.type === "object" && source.properties && typeof source.properties === "object") {
+    const properties = output.properties as JsonSchemaNode;
+    const originallyRequired = new Set(Array.isArray(source.required) ? source.required : []);
+    for (const key of Object.keys(properties))
+      if (!originallyRequired.has(key))
+        properties[key] = { anyOf: [properties[key], { type: "null" }] };
+    output.required = Object.keys(properties);
+  }
+  return output;
+}
+
+/**
+ * Provider-facing strict schema. Optional contract fields are nullable here because OpenAI strict
+ * output requires every property; nulls are removed after parsing and before runtime validation.
+ */
+export const scientificEditorialDraftJsonSchema = strictProviderSchema(
+  z.toJSONSchema(scientificEditorialDraftSchema, { reused: "inline" }),
+);
+
 export const contextualScientificMaterialSchema = z
   .object({
     schemaVersion: z.literal(CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION),
