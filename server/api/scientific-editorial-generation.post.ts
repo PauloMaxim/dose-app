@@ -1,4 +1,11 @@
-import { defineEventHandler, getHeader, readBody, setResponseStatus } from "h3";
+import {
+  HTTPError,
+  assertBodySize,
+  defineEventHandler,
+  getHeader,
+  readBody,
+  setResponseStatus,
+} from "h3";
 import { z } from "zod";
 import { getScientificOperationEnv } from "../../src/server/config/env.server";
 import { isScientificPilotAuthorized } from "../../src/server/scientific/pilot-ingestion.server";
@@ -25,6 +32,15 @@ export default defineEventHandler(async (event) => {
   if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
     setResponseStatus(event, 413);
     return { ok: false, error: "request_too_large" };
+  }
+  try {
+    await assertBodySize(event, MAX_BODY_BYTES);
+  } catch (error) {
+    if (HTTPError.isError(error) && error.status === 413) {
+      setResponseStatus(event, 413);
+      return { ok: false, error: "request_too_large" };
+    }
+    throw error;
   }
   const { SCIENTIFIC_INGESTION_TOKEN } = getScientificOperationEnv();
   if (!isScientificPilotAuthorized(getHeader(event, "authorization"), SCIENTIFIC_INGESTION_TOKEN)) {
