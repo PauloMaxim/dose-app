@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { scientificEditorialDraftJsonSchema } from "./contracts";
-import { DEFAULT_SCIENTIFIC_EDITORIAL_MODEL, loadScientificEditorialConfig } from "./config.server";
+import {
+  DEFAULT_SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS,
+  DEFAULT_SCIENTIFIC_EDITORIAL_MODEL,
+  loadScientificEditorialConfig,
+} from "./config.server";
 import { pmid42717033ExperimentalDraft } from "./pmid-42717033-experiment.fixture";
 import {
   OpenAIScientificEditorialProvider,
@@ -38,13 +42,15 @@ const config = {
   model: "test-model",
   timeoutMs: 50,
   maxInputCharacters: 120_000,
-  maxOutputTokens: 8_000,
+  maxOutputTokens: 25_000,
 };
 
-test("editorial config defaults to gpt-5.6-sol without invoking a provider", () => {
+test("editorial config defaults to gpt-6-sol without invoking a provider", () => {
   const loaded = loadScientificEditorialConfig({ OPENAI_API_KEY: "test-only" });
-  assert.equal(DEFAULT_SCIENTIFIC_EDITORIAL_MODEL, "gpt-5.6-sol");
-  assert.equal(loaded.model, "gpt-5.6-sol");
+  assert.equal(DEFAULT_SCIENTIFIC_EDITORIAL_MODEL, "gpt-6-sol");
+  assert.equal(DEFAULT_SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS, 25_000);
+  assert.equal(loaded.model, "gpt-6-sol");
+  assert.equal(loaded.maxOutputTokens, 25_000);
 });
 
 test("SCIENTIFIC_EDITORIAL_MODEL overrides the default without invoking a provider", () => {
@@ -94,7 +100,9 @@ test("OpenAI adapter requests strict schema and parses structured output", async
     strict: true,
     schema: scientificEditorialDraftJsonSchema,
   });
-  assert.equal(captured?.max_output_tokens, 8_000);
+  assert.equal(captured?.store, false);
+  assert.deepEqual(captured?.reasoning, { mode: "standard", effort: "medium" });
+  assert.equal(captured?.max_output_tokens, 25_000);
   const blockSchema = (
     scientificEditorialDraftJsonSchema as {
       properties: {
@@ -163,8 +171,17 @@ test("one mocked generation captures safe usage and validates before returning t
           calls += 1;
           return {
             id: "response-test",
+            model: "test-model-2026-09-01",
+            service_tier: "default",
+            status: "completed",
             output_text: JSON.stringify(pmid42717033ExperimentalDraft),
-            usage: { input_tokens: 100, output_tokens: 200, total_tokens: 300 },
+            usage: {
+              input_tokens: 100,
+              input_tokens_details: { cached_tokens: 40, cache_write_tokens: 10 },
+              output_tokens: 200,
+              output_tokens_details: { reasoning_tokens: 75 },
+              total_tokens: 300,
+            },
           };
         },
       },
@@ -177,9 +194,108 @@ test("one mocked generation captures safe usage and validates before returning t
   );
   assert.equal(calls, 1);
   assert.equal(result.validationStatus, "accepted");
-  assert.deepEqual(result.usage, { inputTokens: 100, outputTokens: 200, totalTokens: 300 });
+  assert.equal(result.model, "test-model");
+  assert.equal(result.responseModel, "test-model-2026-09-01");
+  assert.equal(result.serviceTier, "default");
+  assert.equal(result.responseId, "response-test");
+  assert.equal(result.responseStatus, "completed");
+  assert.deepEqual(result.usage, {
+    inputTokens: 100,
+    cachedInputTokens: 40,
+    cacheWriteTokens: 10,
+    outputTokens: 200,
+    reasoningTokens: 75,
+    totalTokens: 300,
+  });
   assert.equal(result.draft?.reviewStatus, "pending");
   assert.equal(result.validationErrors.length, 0);
+});
+
+test("process env model is used by the provider and reported when no env dependency is passed", async () => {
+  const previousApiKey = process.env.OPENAI_API_KEY;
+  const previousModel = process.env.SCIENTIFIC_EDITORIAL_MODEL;
+  process.env.OPENAI_API_KEY = "test-only";
+  process.env.SCIENTIFIC_EDITORIAL_MODEL = "process-env-model";
+  let requestedModel: unknown;
+  try {
+    const result = await runRealEditorialGeneration(
+      { articleId: SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID, confirmRealGeneration: true },
+      {
+        transport: {
+          async create(request) {
+            requestedModel = request.model;
+            return { output_text: JSON.stringify(pmid42717033ExperimentalDraft) };
+          },
+        },
+      },
+    );
+    assert.equal(requestedModel, "process-env-model");
+    assert.equal(result.model, "process-env-model");
+  } finally {
+    if (previousApiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousApiKey;
+    if (previousModel === undefined) delete process.env.SCIENTIFIC_EDITORIAL_MODEL;
+    else process.env.SCIENTIFIC_EDITORIAL_MODEL = previousModel;
+  }
+});
+
+test("injected env overrides process env for deterministic tests", async () => {
+  const previousModel = process.env.SCIENTIFIC_EDITORIAL_MODEL;
+  process.env.SCIENTIFIC_EDITORIAL_MODEL = "process-env-model";
+  let requestedModel: unknown;
+  try {
+    const result = await runRealEditorialGeneration(
+      { articleId: SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID, confirmRealGeneration: true },
+      {
+        env: { OPENAI_API_KEY: "test-only", SCIENTIFIC_EDITORIAL_MODEL: "injected-model" },
+        transport: {
+          async create(request) {
+            requestedModel = request.model;
+            return { output_text: JSON.stringify(pmid42717033ExperimentalDraft) };
+          },
+        },
+      },
+    );
+    assert.equal(requestedModel, "injected-model");
+    assert.equal(result.model, "injected-model");
+  } finally {
+    if (previousModel === undefined) delete process.env.SCIENTIFIC_EDITORIAL_MODEL;
+    else process.env.SCIENTIFIC_EDITORIAL_MODEL = previousModel;
+  }
+});
+
+test("an incomplete response records sanitized metrics and is never parsed as a draft", async () => {
+  const result = await runRealEditorialGeneration(
+    { articleId: SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID, confirmRealGeneration: true },
+    {
+      env: { OPENAI_API_KEY: "test-only" },
+      transport: {
+        async create() {
+          return {
+            id: "response-incomplete",
+            model: "gpt-6-sol-2026-09-01",
+            service_tier: "default",
+            status: "incomplete",
+            incomplete_details: { reason: "max_output_tokens" },
+            output_text: JSON.stringify(pmid42717033ExperimentalDraft),
+            usage: {
+              input_tokens: 100,
+              input_tokens_details: { cached_tokens: 20, cache_write_tokens: 5 },
+              output_tokens: 25_000,
+              output_tokens_details: { reasoning_tokens: 24_000 },
+              total_tokens: 25_100,
+            },
+          };
+        },
+      },
+    },
+  );
+  assert.equal(result.validationStatus, "not_run");
+  assert.equal(result.draft, undefined);
+  assert.equal(result.error?.code, "invalid_output");
+  assert.equal(result.incompleteReason, "max_output_tokens");
+  assert.equal(result.responseStatus, "incomplete");
+  assert.equal(result.usage?.reasoningTokens, 24_000);
 });
 
 test("invalid model output returns validator errors and never exposes a draft", async () => {

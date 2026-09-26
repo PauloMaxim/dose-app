@@ -8,14 +8,20 @@ import type {
 
 export interface ScientificEditorialUsage {
   inputTokens: number;
+  cachedInputTokens?: number;
+  cacheWriteTokens?: number;
   outputTokens: number;
+  reasoningTokens?: number;
   totalTokens: number;
 }
 
 export interface ScientificEditorialProviderMetrics {
-  model: string;
+  responseModel?: string;
+  serviceTier?: string;
   usage?: ScientificEditorialUsage;
   responseId?: string;
+  status?: string;
+  incompleteReason?: string;
 }
 
 export class ScientificEditorialProviderError extends Error {
@@ -33,8 +39,18 @@ export interface OpenAIEditorialTransport {
     options: { signal: AbortSignal; apiKey: string },
   ): Promise<{
     id?: string;
+    model?: string;
+    service_tier?: string;
+    status?: string;
+    incomplete_details?: { reason?: string } | null;
     output_text?: string;
-    usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+    usage?: {
+      input_tokens?: number;
+      input_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
+      output_tokens?: number;
+      output_tokens_details?: { reasoning_tokens?: number };
+      total_tokens?: number;
+    };
   }>;
 }
 
@@ -49,11 +65,25 @@ export const openAIEditorialFetchTransport: OpenAIEditorialTransport = {
     if (!response.ok) throw new Error(`OpenAI request failed with status ${response.status}`);
     const body = (await response.json()) as {
       id?: string;
+      model?: string;
+      service_tier?: string;
+      status?: string;
+      incomplete_details?: { reason?: string } | null;
       output?: { content?: { type?: string; text?: string }[] }[];
-      usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+      usage?: {
+        input_tokens?: number;
+        input_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
+        output_tokens?: number;
+        output_tokens_details?: { reasoning_tokens?: number };
+        total_tokens?: number;
+      };
     };
     return {
       id: body.id,
+      model: body.model,
+      service_tier: body.service_tier,
+      status: body.status,
+      incomplete_details: body.incomplete_details,
       output_text: body.output
         ?.flatMap((item) => item.content ?? [])
         .find((item) => item.type === "output_text")?.text,
@@ -61,6 +91,11 @@ export const openAIEditorialFetchTransport: OpenAIEditorialTransport = {
     };
   },
 };
+
+function sanitizedIncompleteReason(reason: string | undefined): string | undefined {
+  if (!reason) return undefined;
+  return ["max_output_tokens", "content_filter"].includes(reason) ? reason : "other";
+}
 
 function omitNullObjectProperties(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(omitNullObjectProperties);
@@ -95,6 +130,8 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
           model: this.config.model,
           instructions: request.systemPrompt,
           input,
+          store: false,
+          reasoning: { mode: "standard", effort: "medium" },
           max_output_tokens: this.config.maxOutputTokens,
           text: {
             format: {
@@ -107,6 +144,28 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
         },
         { signal: controller.signal, apiKey: this.config.apiKey },
       );
+      this.observe?.({
+        responseModel: response.model,
+        serviceTier: response.service_tier,
+        responseId: response.id,
+        status: response.status,
+        incompleteReason: sanitizedIncompleteReason(response.incomplete_details?.reason),
+        usage: response.usage
+          ? {
+              inputTokens: response.usage.input_tokens ?? 0,
+              cachedInputTokens: response.usage.input_tokens_details?.cached_tokens,
+              cacheWriteTokens: response.usage.input_tokens_details?.cache_write_tokens,
+              outputTokens: response.usage.output_tokens ?? 0,
+              reasoningTokens: response.usage.output_tokens_details?.reasoning_tokens,
+              totalTokens: response.usage.total_tokens ?? 0,
+            }
+          : undefined,
+      });
+      if (response.status === "incomplete")
+        throw new ScientificEditorialProviderError(
+          "invalid_output",
+          "OpenAI response was incomplete",
+        );
       if (!response.output_text)
         throw new ScientificEditorialProviderError(
           "invalid_output",
@@ -121,17 +180,6 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
           "OpenAI structured output was not valid JSON",
         );
       }
-      this.observe?.({
-        model: this.config.model,
-        responseId: response.id,
-        usage: response.usage
-          ? {
-              inputTokens: response.usage.input_tokens ?? 0,
-              outputTokens: response.usage.output_tokens ?? 0,
-              totalTokens: response.usage.total_tokens ?? 0,
-            }
-          : undefined,
-      });
       return output;
     } catch (error) {
       if (error instanceof ScientificEditorialProviderError) throw error;

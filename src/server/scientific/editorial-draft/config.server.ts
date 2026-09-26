@@ -1,9 +1,9 @@
 import "../server-only";
 
-export const DEFAULT_SCIENTIFIC_EDITORIAL_MODEL = "gpt-5.6-sol";
+export const DEFAULT_SCIENTIFIC_EDITORIAL_MODEL = "gpt-6-sol";
 export const DEFAULT_SCIENTIFIC_EDITORIAL_TIMEOUT_MS = 45_000;
 export const DEFAULT_SCIENTIFIC_EDITORIAL_MAX_INPUT_CHARS = 120_000;
-export const DEFAULT_SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS = 8_000;
+export const DEFAULT_SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS = 25_000;
 
 export interface ScientificEditorialRuntimeConfig {
   apiKey: string;
@@ -55,7 +55,7 @@ export function loadScientificEditorialConfig(
       env.SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS,
       DEFAULT_SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS,
       1_000,
-      16_000,
+      64_000,
     ),
   };
 }
