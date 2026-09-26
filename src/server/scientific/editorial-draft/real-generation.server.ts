@@ -41,6 +41,11 @@ export type RealEditorialGenerationResult = {
   startedAt: string;
   durationMs: number;
   usage?: ScientificEditorialProviderMetrics["usage"];
+  responseModel?: string;
+  serviceTier?: string;
+  responseId?: string;
+  responseStatus?: string;
+  incompleteReason?: string;
   validationStatus: "accepted" | "rejected" | "not_run";
   validationErrors: EditorialDraftValidationIssue[];
   draft?: ScientificEditorialDraft;
@@ -86,8 +91,8 @@ export async function runRealEditorialGeneration(
   const now = dependencies.now ?? Date.now;
   const started = now();
   const startedAt = new Date(started).toISOString();
-  const model =
-    dependencies.env?.SCIENTIFIC_EDITORIAL_MODEL?.trim() || DEFAULT_SCIENTIFIC_EDITORIAL_MODEL;
+  const runtimeEnv = dependencies.env ?? process.env;
+  const model = runtimeEnv.SCIENTIFIC_EDITORIAL_MODEL?.trim() || DEFAULT_SCIENTIFIC_EDITORIAL_MODEL;
   const base = {
     generationId: (dependencies.generationId ?? randomUUID)(),
     articleId: request.articleId,
@@ -97,7 +102,7 @@ export async function runRealEditorialGeneration(
   };
   let config;
   try {
-    config = loadScientificEditorialConfig(dependencies.env);
+    config = loadScientificEditorialConfig(runtimeEnv);
   } catch (error) {
     const message =
       error instanceof ScientificEditorialConfigurationError
@@ -112,6 +117,14 @@ export async function runRealEditorialGeneration(
     };
   }
   let metrics: ScientificEditorialProviderMetrics | undefined;
+  const observedMetrics = () => ({
+    usage: metrics?.usage,
+    responseModel: metrics?.responseModel,
+    serviceTier: metrics?.serviceTier,
+    responseId: metrics?.responseId,
+    responseStatus: metrics?.status,
+    incompleteReason: metrics?.incompleteReason,
+  });
   const provider = new OpenAIScientificEditorialProvider(
     dependencies.transport ?? openAIEditorialFetchTransport,
     config,
@@ -127,14 +140,14 @@ export async function runRealEditorialGeneration(
       return {
         ...base,
         durationMs,
-        usage: metrics?.usage,
+        ...observedMetrics(),
         validationStatus: "rejected",
         validationErrors: result.errors,
       };
     return {
       ...base,
       durationMs,
-      usage: metrics?.usage,
+      ...observedMetrics(),
       validationStatus: "accepted",
       validationErrors: [],
       draft: result.draft,
@@ -147,7 +160,7 @@ export async function runRealEditorialGeneration(
     return {
       ...base,
       durationMs: Math.max(0, now() - started),
-      usage: metrics?.usage,
+      ...observedMetrics(),
       validationStatus: "not_run",
       validationErrors: [],
       error: { code: typed.code, message: typed.message },
