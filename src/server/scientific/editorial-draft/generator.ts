@@ -52,7 +52,10 @@ export class ValidatedScientificEditorialDraftGenerator {
   constructor(private readonly provider: ScientificEditorialProvider) {}
 
   async generate(input: GenerateEditorialDraftInput): Promise<EditorialGenerationResult> {
-    const scientificAuthority = deriveEditorialScientificAuthority(input.interpretationArtifact);
+    const scientificAuthority = deriveEditorialScientificAuthority(
+      input.factSet,
+      input.interpretationArtifact,
+    );
     const output = await this.provider.generate({
       promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
       systemPrompt: buildScientificEditorialSystemPrompt(input.editorialProfile),
