@@ -29,6 +29,7 @@ import { composeRctDoseDocument } from "./rct-composer";
 import { pmid42717033ExperimentalDraft } from "../editorial-draft/pmid-42717033-experiment.fixture";
 import { projectScientificEditorialDraft } from "../editorial-draft/projection";
 import { validateScientificEditorialDraft } from "../editorial-draft/validation";
+import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "../editorial-draft/profile";
 
 export type PreviewPmid = "42717033" | "41910396" | "42670964";
 export type PreviewVersion = "approved" | "generic" | "experimental";
@@ -40,6 +41,7 @@ const experimentalValidation = validateScientificEditorialDraft({
   factSet: pmid42717033FactSet,
   interpretationArtifact: pmid42717033Interpretation,
   contextualMaterial: [],
+  editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
 });
 if (!experimentalValidation.valid)
   throw new Error(

@@ -54,5 +54,5 @@ export default defineEventHandler(async (event) => {
   }
   const result = await runRealEditorialGeneration(parsed.data);
   setResponseStatus(event, result.error ? 502 : result.validationStatus === "rejected" ? 422 : 200);
-  return { ok: !result.error && result.validationStatus === "accepted", result };
+  return { ok: !result.error && result.validationStatus === "structurally_valid", result };
 });

@@ -7,6 +7,7 @@ import { ValidatedScientificEditorialDraftGenerator } from "./generator";
 import { pmid42717033ExperimentalDraft } from "./pmid-42717033-experiment.fixture";
 import { projectScientificEditorialDraft } from "./projection";
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION, SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT } from "./prompt";
+import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -20,6 +21,7 @@ const input = {
   factSet: pmid42717033FactSet,
   interpretationArtifact: pmid42717033Interpretation,
   contextualMaterial: [],
+  editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
 };
 
 test("the deterministic provider exercises structured generation without network I/O", async () => {
@@ -28,7 +30,14 @@ test("the deterministic provider exercises structured generation without network
   const result = await generator.generate(input);
   assert.equal(result.ok, true);
   assert.deepEqual(provider.calls, [SCIENTIFIC_EDITORIAL_PROMPT_VERSION]);
+  assert.equal(provider.requests[0].input.editorialProfile.targetLanguage, "pt-BR");
+  assert.ok(
+    provider.requests[0].scientificAuthority.inferenceBoundaries.some(
+      ({ id }) => id === "do_not_infer_individual_dose_effect",
+    ),
+  );
   if (result.ok) {
+    assert.equal(result.deterministicValidation, "passed");
     assert.equal(result.draft.requiresHumanReview, true);
     assert.equal(result.draft.reviewStatus, "pending");
     assert.ok(
@@ -37,9 +46,38 @@ test("the deterministic provider exercises structured generation without network
   }
 });
 
+test("structurally valid free prose remains pending and cannot become an approved document", async () => {
+  const adversarial = structuredClone(pmid42717033ExperimentalDraft);
+  const claim = adversarial.blocks[0].claims[0];
+  assert.notEqual(claim.statementKind, "boundary_explanation");
+  if (claim.statementKind === "boundary_explanation") throw new Error("Expected claim");
+  claim.text = "Mitiperstat e placebo são equivalentes.";
+  claim.statementKind = "article_supported_fact";
+  claim.epistemicStatus = "observed_clinical_result";
+
+  const result = await new ValidatedScientificEditorialDraftGenerator(
+    new DeterministicScientificEditorialProvider(adversarial),
+  ).generate(input);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.deterministicValidation, "passed");
+  assert.equal(result.draft.requiresHumanReview, true);
+  assert.equal(result.draft.reviewStatus, "pending");
+
+  const preview = projectScientificEditorialDraft({
+    draft: result.draft,
+    sourceSet: pmid42717033SourceSet,
+  });
+  assert.match(preview.id, /experimental-projection-v1$/);
+  assert.notEqual(preview.id, "approved");
+});
+
 test("generation returns a structured validation failure and never repairs output", async () => {
   const invalid = structuredClone(pmid42717033ExperimentalDraft);
-  invalid.blocks[0].claims[0].grounding.factIds = ["fact:does-not-exist"];
+  const invalidClaim = invalid.blocks[0].claims[0];
+  assert.notEqual(invalidClaim.statementKind, "boundary_explanation");
+  if (invalidClaim.statementKind === "boundary_explanation") throw new Error("Expected claim");
+  invalidClaim.grounding.factIds = ["fact:does-not-exist"];
   const result = await new ValidatedScientificEditorialDraftGenerator(
     new DeterministicScientificEditorialProvider(invalid),
   ).generate(input);
@@ -63,7 +101,7 @@ test("schema-invalid provider output is rejected without a typed candidate", asy
   }
 });
 
-test("validated draft projects generically to DoseDocument", () => {
+test("deterministically checked pending draft projects only to an experimental DoseDocument", () => {
   const document = projectScientificEditorialDraft({
     draft: pmid42717033ExperimentalDraft,
     sourceSet: pmid42717033SourceSet,
@@ -85,13 +123,24 @@ test("the generic prompt contains no canary-specific scientific content", () => 
 });
 
 test("the generation prompt declares every canonical unit synthesized by validation", () => {
-  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v2");
+  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v5");
   for (const unit of Object.values(SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS))
     assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, new RegExp(`"${unit}"`));
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /sample sizes, event counts, and denominators/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /allocation ratio parts/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /confidenceInterval\.value\.levelPercent/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /pValue\.value\.value/);
+});
+
+test("the editorial profile requires supported progressive comprehension without padding", () => {
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /targetLanguage "pt-BR"/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Do not translate IDs, canonical units/);
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /progressive understanding rather than brevity/i,
+  );
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /omit unsupported material/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /without padding, minimum length/i);
 });
 
 test("experiment remains isolated from public surfaces and contains no remote provider", async () => {

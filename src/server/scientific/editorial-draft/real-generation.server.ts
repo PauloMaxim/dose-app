@@ -19,6 +19,7 @@ import {
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION } from "./prompt";
 import type { EditorialDraftValidationIssue } from "./validation";
 import type { ScientificEditorialDraft } from "./contracts";
+import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -46,10 +47,10 @@ export type RealEditorialGenerationResult = {
   responseId?: string;
   responseStatus?: string;
   incompleteReason?: string;
-  validationStatus: "accepted" | "rejected" | "not_run";
+  validationStatus: "structurally_valid" | "rejected" | "not_run";
   validationErrors: EditorialDraftValidationIssue[];
   draft?: ScientificEditorialDraft;
-  /** Schema-valid candidate; scientifically rejected, unapproved, and pending human review. */
+  /** Schema-valid candidate; deterministically rejected, unapproved, and pending human review. */
   candidateDraft?: ScientificEditorialDraft;
   error?: { code: string; message: string };
 };
@@ -71,6 +72,7 @@ function canaryInput(): GenerateEditorialDraftInput {
     factSet: pmid42717033FactSet,
     interpretationArtifact: pmid42717033Interpretation,
     contextualMaterial: [],
+    editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
   };
 }
 
@@ -151,7 +153,7 @@ export async function runRealEditorialGeneration(
       ...base,
       durationMs,
       ...observedMetrics(),
-      validationStatus: "accepted",
+      validationStatus: "structurally_valid",
       validationErrors: [],
       draft: result.draft,
     };

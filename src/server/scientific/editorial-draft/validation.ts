@@ -9,8 +9,10 @@ import {
   SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS,
   scientificEditorialDraftSchema,
   type ContextualScientificMaterial,
+  type EditorialGenerationProfile,
   type ScientificEditorialDraft,
 } from "./contracts";
+import { deriveEditorialScientificAuthority } from "./scientific-authority";
 
 const structuralUnits = SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS;
 
@@ -18,6 +20,7 @@ export type EditorialDraftValidationCode =
   | "DRAFT_SCHEMA_INVALID"
   | "DRAFT_LINEAGE_MISMATCH"
   | "DRAFT_ARTICLE_MISMATCH"
+  | "DRAFT_LANGUAGE_MISMATCH"
   | "FACT_NOT_FOUND"
   | "INTERPRETATION_CLAIM_NOT_FOUND"
   | "EVIDENCE_ANCHOR_NOT_FOUND"
@@ -26,7 +29,7 @@ export type EditorialDraftValidationCode =
   | "CONTEXT_PROVENANCE_REQUIRED"
   | "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED"
   | "GROUNDING_KIND_INCOMPATIBLE"
-  | "UNSUPPORTED_CONCLUSION_USED"
+  | "INFERENCE_BOUNDARY_NOT_AUTHORIZED"
   | "FULL_TEXT_NOT_AVAILABLE"
   | "EQUIVALENCE_NOT_SUPPORTED"
   | "SUPERIORITY_NOT_SUPPORTED"
@@ -49,6 +52,7 @@ export interface ValidateScientificEditorialDraftInput {
   factSet: RCTScientificFactSet;
   interpretationArtifact: ScientificInterpretationArtifact;
   contextualMaterial?: ContextualScientificMaterial[];
+  editorialProfile: EditorialGenerationProfile;
   /** IDs are supplied only by a future, separately authorized context acquisition boundary. */
   authorizedExternalContextReferenceIds?: string[];
 }
@@ -59,9 +63,13 @@ const substantiveKinds = new Set([
   "contextual_explanation",
 ]);
 
-function hasGrounding(
-  grounding: ScientificEditorialDraft["blocks"][number]["claims"][number]["grounding"],
-) {
+function hasGrounding(grounding: {
+  factIds: string[];
+  interpretationClaimIds: string[];
+  evidenceAnchorIds: string[];
+  sourceDocumentIds: string[];
+  externalContextReferenceIds: string[];
+}) {
   return Object.values(grounding).some((values) => values.length > 0);
 }
 
@@ -173,6 +181,10 @@ function factQuantities(fact: ScientificFact): FactQuantity[] {
   }
 }
 
+/**
+ * Proves deterministic contract properties only. Passing does not semantically approve model prose,
+ * which remains pending mandatory human review.
+ */
 export function validateScientificEditorialDraft(input: ValidateScientificEditorialDraftInput): {
   valid: boolean;
   errors: EditorialDraftValidationIssue[];
@@ -208,6 +220,12 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
       "DRAFT_ARTICLE_MISMATCH",
       "articleId",
       "Draft and scientific inputs must describe one article.",
+    );
+  if (draft.language !== input.editorialProfile.targetLanguage)
+    add(
+      "DRAFT_LANGUAGE_MISMATCH",
+      "language",
+      "Draft language must equal the editorial policy targetLanguage.",
     );
   const lineage = draft.inputLineage;
   if (
@@ -247,24 +265,23 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
     }
   }
 
-  const unsupported = new Set(draft.inferenceLimits.unsupportedConclusions.map(({ id }) => id));
-  for (const [group, conclusions] of Object.entries(draft.inferenceLimits))
-    for (const [index, conclusion] of conclusions.entries()) {
-      const path = `inferenceLimits.${group}.${index}`;
-      for (const factId of conclusion.factIds)
-        if (!factIds.has(factId))
-          add("FACT_NOT_FOUND", `${path}.factIds`, `Unknown conclusion fact: ${factId}`);
-      for (const interpretationId of conclusion.interpretationClaimIds)
-        if (!interpretationIds.has(interpretationId))
-          add(
-            "INTERPRETATION_CLAIM_NOT_FOUND",
-            `${path}.interpretationClaimIds`,
-            `Unknown conclusion interpretation: ${interpretationId}`,
-          );
-    }
+  const authoritativeBoundaries = new Set(
+    deriveEditorialScientificAuthority(input.interpretationArtifact).inferenceBoundaries.map(
+      ({ id }) => id,
+    ),
+  );
   for (const [blockIndex, block] of draft.blocks.entries())
     for (const [claimIndex, claim] of block.claims.entries()) {
       const path = `blocks.${blockIndex}.claims.${claimIndex}`;
+      if (claim.statementKind === "boundary_explanation") {
+        if (!authoritativeBoundaries.has(claim.boundaryId))
+          add(
+            "INFERENCE_BOUNDARY_NOT_AUTHORIZED",
+            `${path}.boundaryId`,
+            `Unknown authoritative inference boundary: ${claim.boundaryId}`,
+          );
+        continue;
+      }
       if (substantiveKinds.has(claim.statementKind) && !hasGrounding(claim.grounding))
         add(
           "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED",
@@ -331,13 +348,6 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
             "EXTERNAL_CONTEXT_REFERENCE_NOT_FOUND",
             `${path}.grounding.externalContextReferenceIds`,
             `Unknown context reference: ${referenceId}`,
-          );
-      for (const conclusionId of claim.conclusionIds)
-        if (unsupported.has(conclusionId))
-          add(
-            "UNSUPPORTED_CONCLUSION_USED",
-            `${path}.conclusionIds`,
-            `Claim invokes prohibited conclusion: ${conclusionId}`,
           );
       if (
         claim.sourceRequirement === "authorized_full_text" &&
