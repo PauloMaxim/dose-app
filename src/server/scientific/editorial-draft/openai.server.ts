@@ -170,6 +170,7 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
         interpretationArtifact: request.input.interpretationArtifact,
         contextualMaterial: request.input.contextualMaterial,
         inferenceBoundaries: request.scientificAuthority.inferenceBoundaries,
+        quantitativeClaims: request.scientificAuthority.quantitativeClaims,
       },
       editorialPolicy: request.input.editorialProfile,
     });

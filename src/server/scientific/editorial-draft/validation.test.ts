@@ -345,6 +345,22 @@ test("does not treat numbers embedded in scientific endpoint names as standalone
   }
 });
 
+test("endpoint nomenclature does not authorize its embedded number, while its typed timepoint remains valid", () => {
+  const draft = clone();
+  const claim = scientificClaim(draft);
+  claim.text = "O 6MWD foi avaliado em 16 semanas.";
+  claim.grounding.factIds = ["pmid:42717033:endpoint-6mwd"];
+  claim.quantitativeClaims = [{ value: 16, unit: "week", factId: "pmid:42717033:endpoint-6mwd" }];
+  assert.deepEqual(validate(draft), { valid: true, errors: [] });
+
+  claim.quantitativeClaims.push({
+    value: 6,
+    unit: "minute",
+    factId: "pmid:42717033:endpoint-6mwd",
+  });
+  expectCode(draft, "QUANTITATIVE_CLAIM_NOT_IN_FACT");
+});
+
 test("keeps a standalone translated duration subject to quantitative declaration", () => {
   const draft = clone();
   const claim = scientificClaim(draft);
