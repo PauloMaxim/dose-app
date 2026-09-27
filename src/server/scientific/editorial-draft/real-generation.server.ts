@@ -49,6 +49,8 @@ export type RealEditorialGenerationResult = {
   validationStatus: "accepted" | "rejected" | "not_run";
   validationErrors: EditorialDraftValidationIssue[];
   draft?: ScientificEditorialDraft;
+  /** Schema-valid candidate; scientifically rejected, unapproved, and pending human review. */
+  candidateDraft?: ScientificEditorialDraft;
   error?: { code: string; message: string };
 };
 
@@ -143,6 +145,7 @@ export async function runRealEditorialGeneration(
         ...observedMetrics(),
         validationStatus: "rejected",
         validationErrors: result.errors,
+        candidateDraft: result.candidateDraft,
       };
     return {
       ...base,

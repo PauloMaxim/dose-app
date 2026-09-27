@@ -4,11 +4,15 @@ import type {
   ScientificInterpretationArtifact,
   ScientificSourceSet,
 } from "../knowledge-representation/editorial-pipeline";
+import type { ScientificFact } from "../knowledge-representation/contracts";
 import {
+  SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS,
   scientificEditorialDraftSchema,
   type ContextualScientificMaterial,
   type ScientificEditorialDraft,
 } from "./contracts";
+
+const structuralUnits = SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS;
 
 export type EditorialDraftValidationCode =
   | "DRAFT_SCHEMA_INVALID"
@@ -59,6 +63,114 @@ function hasGrounding(
   grounding: ScientificEditorialDraft["blocks"][number]["claims"][number]["grounding"],
 ) {
   return Object.values(grounding).some((values) => values.length > 0);
+}
+
+interface FactQuantity {
+  value: number;
+  unit: string;
+}
+
+function availableValue<T>(availability: { status: string; value?: T }): T | undefined {
+  return availability.status === "available" ? availability.value : undefined;
+}
+
+/** Extracts only semantically paired quantities from the typed rct.v1 fact value. */
+function factQuantities(fact: ScientificFact): FactQuantity[] {
+  const value = availableValue(fact.availability);
+  if (!value) return [];
+  switch (value.type) {
+    case "population_sample_size":
+      return [{ value: value.value, unit: structuralUnits.participantCount }];
+    case "population_characteristic": {
+      const denominator = availableValue(value.denominator);
+      return [
+        value.value,
+        ...(denominator === undefined
+          ? []
+          : [{ value: denominator, unit: structuralUnits.participantCount }]),
+      ];
+    }
+    case "eligibility":
+      return [value.value];
+    case "arm": {
+      const dose = availableValue(value.dose);
+      return [
+        ...(dose ? [dose] : []),
+        ...(value.randomizedSampleSize === undefined
+          ? []
+          : [{ value: value.randomizedSampleSize, unit: structuralUnits.participantCount }]),
+      ];
+    }
+    case "allocation_ratio":
+      return value.allocations.map(({ parts }) => ({
+        value: parts,
+        unit: structuralUnits.allocationPart,
+      }));
+    case "treatment_duration":
+      return [value.duration];
+    case "endpoint_timepoint":
+      return [value.timepoint];
+    case "endpoint":
+      return [value.timepoint];
+    case "result": {
+      const interval = availableValue(value.estimate.confidenceInterval);
+      const pValue = availableValue(value.estimate.pValue);
+      return [
+        { value: value.estimate.value, unit: value.estimate.unit },
+        ...(interval
+          ? [
+              { value: interval.lower, unit: value.estimate.unit },
+              { value: interval.upper, unit: value.estimate.unit },
+              { value: interval.levelPercent, unit: structuralUnits.confidenceLevelPercent },
+            ]
+          : []),
+        ...(pValue ? [{ value: pValue.value, unit: structuralUnits.pValue }] : []),
+        value.timepoint,
+      ];
+    }
+    case "arm_estimate": {
+      const eventCount = availableValue(value.eventCount);
+      const denominator = availableValue(value.denominator);
+      return [
+        { value: value.estimate.value, unit: value.estimate.unit },
+        ...(eventCount === undefined
+          ? []
+          : [{ value: eventCount, unit: structuralUnits.participantCount }]),
+        ...(denominator === undefined
+          ? []
+          : [{ value: denominator, unit: structuralUnits.participantCount }]),
+        value.timepoint,
+      ];
+    }
+    case "statistical_hypothesis": {
+      const pValue = availableValue(value.pValue);
+      return [
+        value.margin,
+        {
+          value: value.confidenceLevelPercent,
+          unit: structuralUnits.confidenceLevelPercent,
+        },
+        ...(pValue ? [{ value: pValue.value, unit: structuralUnits.pValue }] : []),
+      ];
+    }
+    case "safety_event": {
+      const denominator = availableValue(value.denominator);
+      return [
+        value.frequency,
+        ...(denominator === undefined
+          ? []
+          : [{ value: denominator, unit: structuralUnits.participantCount }]),
+      ];
+    }
+    case "study_design_feature":
+    case "blinding":
+    case "phase":
+    case "population_condition":
+    case "safety_comparison":
+    case "registry_identifier":
+    case "mechanism_relation":
+      return [];
+  }
 }
 
 export function validateScientificEditorialDraft(input: ValidateScientificEditorialDraftInput): {
@@ -170,26 +282,23 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
           add("FACT_NOT_FOUND", `${path}.grounding.factIds`, `Unknown fact: ${factId}`);
       for (const quantitative of claim.quantitativeClaims) {
         const fact = input.factSet.facts.find(({ id }) => id === quantitative.factId);
-        const serialized = fact ? JSON.stringify(fact.availability) : "";
-        if (
-          !fact ||
-          !claim.grounding.factIds.includes(quantitative.factId) ||
-          !serialized.includes(`"value":${quantitative.value}`) ||
-          !serialized.includes(`"unit":"${quantitative.unit}"`)
-        )
+        const quantityExists =
+          fact?.availability.status === "available" &&
+          factQuantities(fact).some(
+            ({ value, unit }) => value === quantitative.value && unit === quantitative.unit,
+          );
+        if (!fact || !claim.grounding.factIds.includes(quantitative.factId) || !quantityExists)
           add(
             "QUANTITATIVE_CLAIM_NOT_IN_FACT",
             `${path}.quantitativeClaims`,
             "Every declared quantitative value and unit must occur in its grounded fact.",
           );
       }
-      const proseNumbers = claim.text.match(/(?<![\p{L}\d])-?\d+(?:[.,]\d+)?(?![\p{L}\d])/gu) ?? [];
-      const declaredNumbers = claim.quantitativeClaims.flatMap(({ value }) => [
-        String(value),
-        String(value).replace(".", ","),
-      ]);
+      const proseNumbers =
+        claim.text.match(/(?<![\p{L}\d\p{Pd}])[-−]?\d+(?:[.,]\d+)?(?![\p{L}\d\p{Pd}])/gu) ?? [];
+      const declaredNumbers = claim.quantitativeClaims.map(({ value }) => value);
       for (const proseNumber of proseNumbers)
-        if (!declaredNumbers.includes(proseNumber.replace("−", "-")))
+        if (!declaredNumbers.includes(Number(proseNumber.replace("−", "-").replace(",", "."))))
           add(
             "QUANTITATIVE_CLAIM_NOT_DECLARED",
             `${path}.text`,
