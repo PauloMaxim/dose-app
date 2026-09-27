@@ -34,15 +34,20 @@ export interface ScientificEditorialDraftGenerator {
 }
 
 export type EditorialGenerationResult =
-  | { ok: true; draft: ScientificEditorialDraft }
+  | {
+      ok: true;
+      /** Deterministic checks passed; prose is not semantically approved and remains pending. */
+      deterministicValidation: "passed";
+      draft: ScientificEditorialDraft;
+    }
   | {
       ok: false;
       errors: EditorialDraftValidationIssue[];
-      /** Schema-valid provider output that remains scientifically rejected and pending review. */
+      /** Schema-valid provider output that failed deterministic checks and remains pending review. */
       candidateDraft?: ScientificEditorialDraft;
     };
 
-/** Generation is untrusted until the independent contract validator accepts the output. */
+/** Passing deterministic validation never replaces mandatory human semantic review. */
 export class ValidatedScientificEditorialDraftGenerator {
   constructor(private readonly provider: ScientificEditorialProvider) {}
 
@@ -66,6 +71,6 @@ export class ValidatedScientificEditorialDraftGenerator {
         ...(parsed.success ? { candidateDraft: parsed.data } : {}),
       };
     if (!parsed.success) return { ok: false, errors: report.errors };
-    return { ok: true, draft: parsed.data };
+    return { ok: true, deterministicValidation: "passed", draft: parsed.data };
   }
 }

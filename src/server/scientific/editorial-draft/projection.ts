@@ -59,7 +59,7 @@ function sourceReferences(sourceSet: ScientificSourceSet): DoseDocument["sourceR
   });
 }
 
-/** Experimental, kind-driven presentation only. Validation must happen before this boundary. */
+/** Experimental preview only; this pending draft is neither semantic approval nor publishable output. */
 export function projectScientificEditorialDraft({
   draft,
   sourceSet,

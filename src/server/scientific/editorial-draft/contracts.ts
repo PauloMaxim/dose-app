@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v3" as const;
+export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v4" as const;
 export const EDITORIAL_GENERATION_PROFILE_VERSION = "editorial-generation-profile.v1" as const;
 export const CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION = "contextual-scientific-material.v1" as const;
 
@@ -71,7 +71,6 @@ const scientificEditorialClaimSchema = z
     ]),
     grounding: claimGroundingSchema,
     epistemicStatus: epistemicStatusSchema.optional(),
-    assertedInferenceIds: z.array(id).default([]),
     quantitativeClaims: z
       .array(z.object({ value: z.number().finite(), unit: id, factId: id }).strict())
       .default([]),

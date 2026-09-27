@@ -47,10 +47,10 @@ export type RealEditorialGenerationResult = {
   responseId?: string;
   responseStatus?: string;
   incompleteReason?: string;
-  validationStatus: "accepted" | "rejected" | "not_run";
+  validationStatus: "structurally_valid" | "rejected" | "not_run";
   validationErrors: EditorialDraftValidationIssue[];
   draft?: ScientificEditorialDraft;
-  /** Schema-valid candidate; scientifically rejected, unapproved, and pending human review. */
+  /** Schema-valid candidate; deterministically rejected, unapproved, and pending human review. */
   candidateDraft?: ScientificEditorialDraft;
   error?: { code: string; message: string };
 };
@@ -153,7 +153,7 @@ export async function runRealEditorialGeneration(
       ...base,
       durationMs,
       ...observedMetrics(),
-      validationStatus: "accepted",
+      validationStatus: "structurally_valid",
       validationErrors: [],
       draft: result.draft,
     };

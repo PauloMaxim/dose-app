@@ -29,9 +29,7 @@ export type EditorialDraftValidationCode =
   | "CONTEXT_PROVENANCE_REQUIRED"
   | "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED"
   | "GROUNDING_KIND_INCOMPATIBLE"
-  | "UNSUPPORTED_CONCLUSION_USED"
   | "INFERENCE_BOUNDARY_NOT_AUTHORIZED"
-  | "INFERENCE_ASSERTION_NOT_AUTHORIZED"
   | "FULL_TEXT_NOT_AVAILABLE"
   | "EQUIVALENCE_NOT_SUPPORTED"
   | "SUPERIORITY_NOT_SUPPORTED"
@@ -183,6 +181,10 @@ function factQuantities(fact: ScientificFact): FactQuantity[] {
   }
 }
 
+/**
+ * Proves deterministic contract properties only. Passing does not semantically approve model prose,
+ * which remains pending mandatory human review.
+ */
 export function validateScientificEditorialDraft(input: ValidateScientificEditorialDraftInput): {
   valid: boolean;
   errors: EditorialDraftValidationIssue[];
@@ -347,20 +349,6 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
             `${path}.grounding.externalContextReferenceIds`,
             `Unknown context reference: ${referenceId}`,
           );
-      for (const [inferenceIndex, inferenceId] of claim.assertedInferenceIds.entries()) {
-        if (authoritativeBoundaries.has(inferenceId))
-          add(
-            "UNSUPPORTED_CONCLUSION_USED",
-            `${path}.assertedInferenceIds.${inferenceIndex}`,
-            `Claim asserts prohibited conclusion: ${inferenceId}`,
-          );
-        else
-          add(
-            "INFERENCE_ASSERTION_NOT_AUTHORIZED",
-            `${path}.assertedInferenceIds.${inferenceIndex}`,
-            `Unknown authoritative inference assertion: ${inferenceId}`,
-          );
-      }
       if (
         claim.sourceRequirement === "authorized_full_text" &&
         !input.sourceSet.coverage.hasAuthorizedFullText

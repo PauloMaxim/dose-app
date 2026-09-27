@@ -15,7 +15,7 @@ import {
 } from "../knowledge-representation/pmid-42717033.fixture";
 
 const base = scientificEditorialDraftSchema.parse({
-  schemaVersion: "scientific-editorial-draft.v3",
+  schemaVersion: "scientific-editorial-draft.v4",
   id: "editorial:pmid:42717033:pt-BR:v1",
   articleId: "pmid:42717033",
   language: "pt-BR",
@@ -43,7 +43,6 @@ const base = scientificEditorialDraftSchema.parse({
             externalContextReferenceIds: [],
           },
           epistemicStatus: "observed_clinical_result",
-          assertedInferenceIds: [],
         },
       ],
     },
@@ -64,7 +63,6 @@ const base = scientificEditorialDraftSchema.parse({
             externalContextReferenceIds: [],
           },
           epistemicStatus: "source_coverage",
-          assertedInferenceIds: [],
         },
       ],
     },
@@ -220,17 +218,15 @@ test("rejects an unknown boundary explanation ID", () => {
   expectCode(draft, "INFERENCE_BOUNDARY_NOT_AUTHORIZED");
 });
 
-test("individual-dose and mechanistic inference assertions remain prohibited", () => {
-  for (const [inferenceId, text] of [
-    ["do_not_infer_individual_dose_effect", "The pooled result establishes each dose's effect."],
-    ["do_not_infer_causality", "The proposed mechanism caused the clinical result."],
-  ] as const) {
-    const draft = clone();
-    const claim = scientificClaim(draft);
-    claim.text = text;
-    claim.assertedInferenceIds = [inferenceId];
-    expectCode(draft, "UNSUPPORTED_CONCLUSION_USED");
-  }
+test("deterministic validation does not claim semantic approval of innocent-looking metadata", () => {
+  const draft = clone();
+  const claim = scientificClaim(draft);
+  claim.text = "Mitiperstat e placebo são equivalentes.";
+  claim.statementKind = "article_supported_fact";
+  claim.epistemicStatus = "observed_clinical_result";
+  assert.deepEqual(validate(draft), { valid: true, errors: [] });
+  assert.equal(draft.requiresHumanReview, true);
+  assert.equal(draft.reviewStatus, "pending");
 });
 
 for (const [status, code] of [

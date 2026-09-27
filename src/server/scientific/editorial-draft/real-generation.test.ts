@@ -197,7 +197,7 @@ test("one mocked generation captures safe usage and validates before returning t
     },
   );
   assert.equal(calls, 1);
-  assert.equal(result.validationStatus, "accepted");
+  assert.equal(result.validationStatus, "structurally_valid");
   assert.equal(result.model, "test-model");
   assert.equal(result.responseModel, "test-model-2026-09-01");
   assert.equal(result.serviceTier, "default");
