@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { scientificEditorialDraftJsonSchema } from "./contracts";
+import { editorialClaimSchema, scientificEditorialDraftJsonSchema } from "./contracts";
 import {
   DEFAULT_SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS,
   DEFAULT_SCIENTIFIC_EDITORIAL_MODEL,
@@ -10,6 +10,7 @@ import {
 import { pmid42717033ExperimentalDraft } from "./pmid-42717033-experiment.fixture";
 import {
   OpenAIScientificEditorialProvider,
+  openAIEditorialFetchTransport,
   ScientificEditorialProviderError,
   type OpenAIEditorialTransport,
 } from "./openai.server";
@@ -48,6 +49,29 @@ const config = {
   maxInputCharacters: 120_000,
   maxOutputTokens: 25_000,
 };
+
+type JsonSchemaNode = Record<string, unknown>;
+
+function visitJsonSchema(
+  node: unknown,
+  path: string,
+  visit: (node: JsonSchemaNode, path: string) => void,
+): void {
+  if (!node || typeof node !== "object" || Array.isArray(node)) return;
+  const schemaNode = node as JsonSchemaNode;
+  visit(schemaNode, path);
+  for (const keyword of ["items", "anyOf", "oneOf"] as const) {
+    const child = schemaNode[keyword];
+    if (Array.isArray(child))
+      child.forEach((value, index) =>
+        visitJsonSchema(value, `${path}.${keyword}[${index}]`, visit),
+      );
+    else visitJsonSchema(child, `${path}.${keyword}`, visit);
+  }
+  if (schemaNode.properties && typeof schemaNode.properties === "object")
+    for (const [name, child] of Object.entries(schemaNode.properties))
+      visitJsonSchema(child, `${path}.properties.${name}`, visit);
+}
 
 test("editorial config defaults to gpt-6-sol without invoking a provider", () => {
   const loaded = loadScientificEditorialConfig({ OPENAI_API_KEY: "test-only" });
@@ -118,6 +142,150 @@ test("OpenAI adapter requests strict schema and parses structured output", async
   assert.deepEqual(blockSchema.properties.title, {
     anyOf: [{ type: "string", minLength: 1, maxLength: 10_000 }, { type: "null" }],
   });
+});
+
+test("provider schema is compatible with the supported strict Structured Outputs subset", () => {
+  const root = scientificEditorialDraftJsonSchema as JsonSchemaNode;
+  assert.equal(root.type, "object");
+
+  const supportedKeywords = new Set([
+    "additionalProperties",
+    "anyOf",
+    "const",
+    "enum",
+    "items",
+    "maxLength",
+    "minItems",
+    "minLength",
+    "pattern",
+    "properties",
+    "required",
+    "type",
+  ]);
+  visitJsonSchema(root, "$", (node, path) => {
+    for (const keyword of Object.keys(node))
+      assert.ok(supportedKeywords.has(keyword), `unsupported ${keyword} at ${path}`);
+    if (node.type !== "object") return;
+    assert.equal(node.additionalProperties, false, `open object at ${path}`);
+    const propertyNames = Object.keys((node.properties ?? {}) as JsonSchemaNode).sort();
+    assert.deepEqual(
+      [...((node.required ?? []) as string[])].sort(),
+      propertyNames,
+      `non-required property at ${path}`,
+    );
+  });
+
+  const claims = (
+    root.properties as {
+      blocks: { items: { properties: { claims: { items: JsonSchemaNode } } } };
+    }
+  ).blocks.items.properties.claims.items;
+  assert.ok(Array.isArray(claims.anyOf));
+  assert.equal((claims.anyOf as unknown[]).length, 2);
+
+  const branches = claims.anyOf as JsonSchemaNode[];
+  const boundaryBranch = branches.find(
+    (branch) =>
+      ((branch.properties as JsonSchemaNode).statementKind as JsonSchemaNode).const ===
+      "boundary_explanation",
+  );
+  const scientificBranch = branches.find(
+    (branch) => "text" in (branch.properties as JsonSchemaNode),
+  );
+  assert.ok(boundaryBranch);
+  assert.ok(scientificBranch);
+  assert.deepEqual(Object.keys(boundaryBranch.properties as JsonSchemaNode).sort(), [
+    "boundaryId",
+    "id",
+    "statementKind",
+  ]);
+  for (const prohibited of [
+    "text",
+    "grounding",
+    "epistemicStatus",
+    "quantitativeClaims",
+    "sourceRequirement",
+  ])
+    assert.equal(prohibited in (boundaryBranch.properties as JsonSchemaNode), false);
+
+  assert.equal(
+    editorialClaimSchema.safeParse(pmid42717033ExperimentalDraft.blocks[0].claims[0]).success,
+    true,
+  );
+  assert.equal(
+    editorialClaimSchema.safeParse({
+      id: "boundary-test",
+      statementKind: "boundary_explanation",
+      boundaryId: "do_not_infer_equivalence",
+    }).success,
+    true,
+  );
+});
+
+test("HTTP failures preserve only sanitized provider diagnostics", async () => {
+  const originalFetch = globalThis.fetch;
+  let sentAuthorization: string | null = null;
+  globalThis.fetch = async (_input, init) => {
+    sentAuthorization = new Headers(init?.headers).get("authorization");
+    return new Response(
+      JSON.stringify({
+        error: {
+          type: "invalid_request_error",
+          code: "invalid_json_schema",
+          message: "private payload and prompt detail",
+        },
+      }),
+      {
+        status: 400,
+        headers: { "content-type": "application/json", "x-request-id": "req_safe-123" },
+      },
+    );
+  };
+  try {
+    const provider = new OpenAIScientificEditorialProvider(openAIEditorialFetchTransport, config);
+    await assert.rejects(provider.generate(providerRequest), (error: unknown) => {
+      assert.ok(error instanceof ScientificEditorialProviderError);
+      assert.equal(error.code, "provider_error");
+      assert.equal(error.message, "OpenAI provider request failed");
+      assert.deepEqual(error.details, {
+        httpStatus: 400,
+        providerCategory: "invalid_request_error",
+        providerCode: "invalid_json_schema",
+        requestId: "req_safe-123",
+      });
+      assert.doesNotMatch(JSON.stringify(error), /private payload|test-only-not-a-secret/);
+      return true;
+    });
+    assert.equal(sentAuthorization, `Bearer ${config.apiKey}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("unsafe provider diagnostics and response messages are discarded", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        error: {
+          type: "invalid request containing source payload",
+          code: { secret: "must-not-escape" },
+          message: "private prompt detail",
+        },
+      }),
+      { status: 422, headers: { "x-request-id": "unsafe request id with spaces" } },
+    );
+  try {
+    const provider = new OpenAIScientificEditorialProvider(openAIEditorialFetchTransport, config);
+    await assert.rejects(provider.generate(providerRequest), (error: unknown) => {
+      assert.ok(error instanceof ScientificEditorialProviderError);
+      assert.deepEqual(error.details, { httpStatus: 422 });
+      assert.doesNotMatch(JSON.stringify(error), /source payload|must-not-escape|prompt detail/);
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("provider timeout aborts once and never retries", async () => {

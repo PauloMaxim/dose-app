@@ -200,6 +200,32 @@ test("boundary explanations cannot carry prohibited epistemic statuses", () => {
   }
 });
 
+test("runtime schema rejects every scientific-claim field on boundary explanations", () => {
+  const prohibitedFields = {
+    text: "Model-authored boundary prose.",
+    grounding: {
+      factIds: [],
+      interpretationClaimIds: [],
+      evidenceAnchorIds: [],
+      sourceDocumentIds: [],
+      externalContextReferenceIds: [],
+    },
+    epistemicStatus: "equivalence",
+    quantitativeClaims: [],
+    sourceRequirement: "declared_coverage",
+  } as const;
+  for (const [field, value] of Object.entries(prohibitedFields)) {
+    const draft = clone();
+    draft.blocks[0].claims.push({
+      id: `invalid-boundary-${field}`,
+      statementKind: "boundary_explanation",
+      boundaryId: "do_not_infer_equivalence",
+      [field]: value,
+    } as never);
+    expectCode(draft, "DRAFT_SCHEMA_INVALID");
+  }
+});
+
 test("ordinary scientific claims cannot use boundary-reference fields to escape validation", () => {
   const draft = clone();
   Object.assign(scientificClaim(draft), {

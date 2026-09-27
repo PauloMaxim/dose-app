@@ -121,14 +121,48 @@ export const scientificEditorialDraftSchema = z
 
 type JsonSchemaNode = Record<string, unknown>;
 
+function isMutuallyExclusiveDiscriminatedUnion(branches: unknown[]): boolean {
+  if (branches.length < 2) return false;
+  const objectBranches = branches.map((branch) =>
+    branch && typeof branch === "object" ? (branch as JsonSchemaNode) : undefined,
+  );
+  if (objectBranches.some((branch) => !branch)) return false;
+  const firstProperties = objectBranches[0]?.properties;
+  if (!firstProperties || typeof firstProperties !== "object") return false;
+  return Object.keys(firstProperties).some((propertyName) => {
+    const discriminatorValueSets = objectBranches.map((branch) => {
+      const properties = branch?.properties;
+      if (!properties || typeof properties !== "object") return undefined;
+      const property = (properties as JsonSchemaNode)[propertyName];
+      if (!property || typeof property !== "object") return undefined;
+      const schema = property as JsonSchemaNode;
+      const values = "const" in schema ? [schema.const] : schema.enum;
+      return Array.isArray(values) && values.length > 0
+        ? new Set(values.map((value) => JSON.stringify(value)))
+        : undefined;
+    });
+    if (discriminatorValueSets.some((values) => !values)) return false;
+    const seen = new Set<string>();
+    for (const values of discriminatorValueSets) {
+      for (const value of values ?? []) {
+        if (seen.has(value)) return false;
+        seen.add(value);
+      }
+    }
+    return true;
+  });
+}
+
 function strictProviderSchema(node: unknown): unknown {
   if (Array.isArray(node)) return node.map(strictProviderSchema);
   if (!node || typeof node !== "object") return node;
   const source = node as JsonSchemaNode;
+  if (Array.isArray(source.oneOf) && !isMutuallyExclusiveDiscriminatedUnion(source.oneOf))
+    throw new Error("Provider schema contains a oneOf that is not a discriminated union");
   const output = Object.fromEntries(
     Object.entries(source)
       .filter(([key]) => key !== "$schema" && key !== "default")
-      .map(([key, value]) => [key, strictProviderSchema(value)]),
+      .map(([key, value]) => [key === "oneOf" ? "anyOf" : key, strictProviderSchema(value)]),
   ) as JsonSchemaNode;
   if (source.type === "object" && source.properties && typeof source.properties === "object") {
     const properties = output.properties as JsonSchemaNode;

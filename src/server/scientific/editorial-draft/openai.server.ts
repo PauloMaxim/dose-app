@@ -24,12 +24,26 @@ export interface ScientificEditorialProviderMetrics {
   incompleteReason?: string;
 }
 
+export interface ScientificEditorialProviderErrorDetails {
+  httpStatus?: number;
+  providerCategory?: string;
+  providerCode?: string;
+  requestId?: string;
+}
+
 export class ScientificEditorialProviderError extends Error {
   constructor(
     public readonly code: "payload_too_large" | "timeout" | "provider_error" | "invalid_output",
     message: string,
+    public readonly details?: ScientificEditorialProviderErrorDetails,
   ) {
     super(message);
+  }
+}
+
+class OpenAIEditorialHttpError extends Error {
+  constructor(public readonly details: ScientificEditorialProviderErrorDetails) {
+    super(`OpenAI request failed with status ${details.httpStatus}`);
   }
 }
 
@@ -62,7 +76,28 @@ export const openAIEditorialFetchTransport: OpenAIEditorialTransport = {
       body: JSON.stringify(request),
       signal,
     });
-    if (!response.ok) throw new Error(`OpenAI request failed with status ${response.status}`);
+    if (!response.ok) {
+      let errorBody: unknown;
+      try {
+        errorBody = await response.json();
+      } catch {
+        errorBody = undefined;
+      }
+      const error =
+        errorBody && typeof errorBody === "object" && "error" in errorBody
+          ? (errorBody.error as unknown)
+          : undefined;
+      const metadata = error && typeof error === "object" ? (error as JsonErrorMetadata) : {};
+      const providerCategory = sanitizedProviderMetadata(metadata.type);
+      const providerCode = sanitizedProviderMetadata(metadata.code);
+      const requestId = sanitizedProviderMetadata(response.headers.get("x-request-id"));
+      throw new OpenAIEditorialHttpError({
+        httpStatus: response.status,
+        ...(providerCategory ? { providerCategory } : {}),
+        ...(providerCode ? { providerCode } : {}),
+        ...(requestId ? { requestId } : {}),
+      });
+    }
     const body = (await response.json()) as {
       id?: string;
       model?: string;
@@ -91,6 +126,17 @@ export const openAIEditorialFetchTransport: OpenAIEditorialTransport = {
     };
   },
 };
+
+interface JsonErrorMetadata {
+  type?: unknown;
+  code?: unknown;
+}
+
+function sanitizedProviderMetadata(value: unknown): string | undefined {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(value)
+    ? value
+    : undefined;
+}
 
 function sanitizedIncompleteReason(reason: string | undefined): string | undefined {
   if (!reason) return undefined;
@@ -198,6 +244,7 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
       throw new ScientificEditorialProviderError(
         "provider_error",
         "OpenAI provider request failed",
+        error instanceof OpenAIEditorialHttpError ? error.details : undefined,
       );
     } finally {
       clearTimeout(timeout);
