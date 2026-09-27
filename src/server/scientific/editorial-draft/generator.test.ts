@@ -134,7 +134,7 @@ test("the generic prompt contains no canary-specific scientific content", () => 
 });
 
 test("the generation prompt declares every canonical unit synthesized by validation", () => {
-  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v5");
+  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v6");
   for (const unit of Object.values(SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS))
     assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, new RegExp(`"${unit}"`));
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /sample sizes, event counts, and denominators/);
@@ -150,10 +150,66 @@ test("the editorial profile requires supported progressive comprehension without
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Do not translate IDs, canonical units/);
   assert.match(
     SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
-    /progressive understanding rather than brevity/i,
+    /optimize for progressive understanding, not word count/i,
   );
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /omit unsupported material/i);
-  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /without padding, minimum length/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /COMPREHENSION > BREVITY/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Do not use padding, a minimum length/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /fixed number of blocks/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /not mandatory sections/);
+});
+
+test("the editorial policy turns supported study facts into explanatory relationships", () => {
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /what the study tried to discover/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /why that question made sense/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /design choice.*structures the test/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /who was actually studied/i);
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /what each endpoint represents within this study/i,
+  );
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /distinct endpoints answer distinct aspects/i);
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /Never supply an endpoint definition.*parametric knowledge/i,
+  );
+});
+
+test("the editorial policy relates estimates to uncertainty without expanding authority", () => {
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /RESULT → UNCERTAINTY → INTERPRETATION/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /confidence interval as uncertainty/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /only what the authorized P-value permits/i);
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /lack of statistical significance into equivalence/i,
+  );
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /biological plausibility, not demonstrated causality or clinical benefit/i,
+  );
+});
+
+test("the editorial policy delimits synthesis, coverage, and progressive disclosure", () => {
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /studied population, intervention or doses, endpoints, and time horizon/i,
+  );
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /whole class, biological pathway, unstudied population/i,
+  );
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /abstract-only coverage must never read as a full-text review/i,
+  );
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /omit it or explicitly state.*supplied-source limitation/i,
+  );
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Opening should quickly orient/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Core should build/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Deep_dive should add/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /not as three paraphrases/i);
 });
 
 test("experiment remains isolated from public surfaces and contains no remote provider", async () => {
