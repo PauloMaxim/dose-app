@@ -304,7 +304,10 @@ test("an incomplete response records sanitized metrics and is never parsed as a 
 
 test("schema-valid but scientifically invalid output remains an explicitly rejected candidate", async () => {
   const invalid = structuredClone(pmid42717033ExperimentalDraft);
-  invalid.blocks[0].claims[0].grounding.factIds = ["unknown-fact"];
+  const invalidClaim = invalid.blocks[0].claims[0];
+  assert.notEqual(invalidClaim.statementKind, "boundary_explanation");
+  if (invalidClaim.statementKind === "boundary_explanation") throw new Error("Expected claim");
+  invalidClaim.grounding.factIds = ["unknown-fact"];
   const result = await runRealEditorialGeneration(
     { articleId: SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID, confirmRealGeneration: true },
     {

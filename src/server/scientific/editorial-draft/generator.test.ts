@@ -47,7 +47,10 @@ test("the deterministic provider exercises structured generation without network
 
 test("generation returns a structured validation failure and never repairs output", async () => {
   const invalid = structuredClone(pmid42717033ExperimentalDraft);
-  invalid.blocks[0].claims[0].grounding.factIds = ["fact:does-not-exist"];
+  const invalidClaim = invalid.blocks[0].claims[0];
+  assert.notEqual(invalidClaim.statementKind, "boundary_explanation");
+  if (invalidClaim.statementKind === "boundary_explanation") throw new Error("Expected claim");
+  invalidClaim.grounding.factIds = ["fact:does-not-exist"];
   const result = await new ValidatedScientificEditorialDraftGenerator(
     new DeterministicScientificEditorialProvider(invalid),
   ).generate(input);
@@ -93,7 +96,7 @@ test("the generic prompt contains no canary-specific scientific content", () => 
 });
 
 test("the generation prompt declares every canonical unit synthesized by validation", () => {
-  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v3");
+  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v4");
   for (const unit of Object.values(SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS))
     assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, new RegExp(`"${unit}"`));
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /sample sizes, event counts, and denominators/);

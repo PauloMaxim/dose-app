@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v2" as const;
+export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v3" as const;
 export const EDITORIAL_GENERATION_PROFILE_VERSION = "editorial-generation-profile.v1" as const;
 export const CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION = "contextual-scientific-material.v1" as const;
 
@@ -59,7 +59,7 @@ export const claimGroundingSchema = z
   })
   .strict();
 
-export const editorialClaimSchema = z
+const scientificEditorialClaimSchema = z
   .object({
     id,
     text,
@@ -71,16 +71,7 @@ export const editorialClaimSchema = z
     ]),
     grounding: claimGroundingSchema,
     epistemicStatus: epistemicStatusSchema.optional(),
-    inferenceBoundaryUses: z
-      .array(
-        z
-          .object({
-            boundaryId: id,
-            use: z.enum(["respected_boundary", "asserted_as_conclusion"]),
-          })
-          .strict(),
-      )
-      .default([]),
+    assertedInferenceIds: z.array(id).default([]),
     quantitativeClaims: z
       .array(z.object({ value: z.number().finite(), unit: id, factId: id }).strict())
       .default([]),
@@ -89,6 +80,20 @@ export const editorialClaimSchema = z
       .default("declared_coverage"),
   })
   .strict();
+
+/** A boundary reference contains no model-authored prose or scientific-claim fields. */
+const editorialBoundaryExplanationSchema = z
+  .object({
+    id,
+    statementKind: z.literal("boundary_explanation"),
+    boundaryId: id,
+  })
+  .strict();
+
+export const editorialClaimSchema = z.discriminatedUnion("statementKind", [
+  scientificEditorialClaimSchema,
+  editorialBoundaryExplanationSchema,
+]);
 
 export const editorialBlockSchema = z
   .object({

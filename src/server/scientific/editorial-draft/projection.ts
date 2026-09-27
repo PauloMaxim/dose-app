@@ -28,7 +28,19 @@ const chapterTitles: Record<ScientificEditorialDraft["blocks"][number]["kind"], 
 };
 
 function facts(block: ScientificEditorialDraft["blocks"][number]) {
-  return [...new Set(block.claims.flatMap(({ grounding }) => grounding.factIds))];
+  return [
+    ...new Set(
+      block.claims.flatMap((claim) =>
+        claim.statementKind === "boundary_explanation" ? [] : claim.grounding.factIds,
+      ),
+    ),
+  ];
+}
+
+function claimText(claim: ScientificEditorialDraft["blocks"][number]["claims"][number]) {
+  return claim.statementKind === "boundary_explanation"
+    ? `Limite de inferência aplicável: ${claim.boundaryId}.`
+    : claim.text;
 }
 
 function sourceReferences(sourceSet: ScientificSourceSet): DoseDocument["sourceReferences"] {
@@ -59,7 +71,9 @@ export function projectScientificEditorialDraft({
   const contentBlocks = draft.blocks.filter(({ kind }) => !["headline", "deck"].includes(kind));
   const quantitativeClaims = draft.blocks.flatMap((block) =>
     block.claims.flatMap((claim) =>
-      claim.quantitativeClaims.map((quantitative) => ({ claim, quantitative })),
+      claim.statementKind === "boundary_explanation"
+        ? []
+        : claim.quantitativeClaims.map((quantitative) => ({ claim, quantitative })),
     ),
   );
   const references = sourceReferences(sourceSet);
@@ -88,11 +102,11 @@ export function projectScientificEditorialDraft({
     articleId: draft.articleId,
     language: "pt-BR",
     label: "Edição editorial Dose",
-    headline: headline.claims.map(({ text }) => text).join(" "),
-    deck: deck.claims.map(({ text }) => text).join(" "),
+    headline: headline.claims.map(claimText).join(" "),
+    deck: deck.claims.map(claimText).join(" "),
     openingSummary: [headline, deck].map((block, index) => ({
       id: `experimental-opening-${index + 1}`,
-      text: block.claims.map(({ text }) => text).join(" "),
+      text: block.claims.map(claimText).join(" "),
       factIds: facts(block),
     })),
     chapters: contentBlocks.map((block, index) => ({
@@ -102,7 +116,7 @@ export function projectScientificEditorialDraft({
         {
           id: `experimental-block-${index + 1}`,
           kind: "prose",
-          paragraphs: block.claims.map(({ text }) => text),
+          paragraphs: block.claims.map(claimText),
           factIds: facts(block),
         },
       ],
@@ -121,7 +135,7 @@ export function projectScientificEditorialDraft({
       (block, index) => ({
         id: `experimental-explainer-${index + 1}`,
         title: block.title ?? chapterTitles[block.kind],
-        body: block.claims.map(({ text }) => text).join(" "),
+        body: block.claims.map(claimText).join(" "),
         factIds: facts(block),
       }),
     ),

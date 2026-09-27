@@ -15,7 +15,7 @@ import {
 } from "../knowledge-representation/pmid-42717033.fixture";
 
 const base = scientificEditorialDraftSchema.parse({
-  schemaVersion: "scientific-editorial-draft.v2",
+  schemaVersion: "scientific-editorial-draft.v3",
   id: "editorial:pmid:42717033:pt-BR:v1",
   articleId: "pmid:42717033",
   language: "pt-BR",
@@ -43,7 +43,7 @@ const base = scientificEditorialDraftSchema.parse({
             externalContextReferenceIds: [],
           },
           epistemicStatus: "observed_clinical_result",
-          inferenceBoundaryUses: [],
+          assertedInferenceIds: [],
         },
       ],
     },
@@ -64,7 +64,7 @@ const base = scientificEditorialDraftSchema.parse({
             externalContextReferenceIds: [],
           },
           epistemicStatus: "source_coverage",
-          inferenceBoundaryUses: [],
+          assertedInferenceIds: [],
         },
       ],
     },
@@ -75,6 +75,13 @@ const base = scientificEditorialDraftSchema.parse({
 
 function clone(): ScientificEditorialDraft {
   return structuredClone(base);
+}
+
+function scientificClaim(draft: ScientificEditorialDraft) {
+  const claim = draft.blocks[0].claims[0];
+  assert.notEqual(claim.statementKind, "boundary_explanation");
+  if (claim.statementKind === "boundary_explanation") throw new Error("Expected scientific claim");
+  return claim;
 }
 
 function validate(draft: unknown = base, contextualMaterial: never[] = []) {
@@ -109,7 +116,7 @@ test("rejects nonexistent fact, interpretation, and evidence IDs", () => {
     ["evidenceAnchorIds", "EVIDENCE_ANCHOR_NOT_FOUND"],
   ] as const) {
     const draft = clone();
-    draft.blocks[0].claims[0].grounding[field] = ["missing:id"];
+    scientificClaim(draft).grounding[field] = ["missing:id"];
     expectCode(draft, code);
   }
 });
@@ -146,7 +153,7 @@ test("rejects contextual material without provenance", () => {
 
 test("rejects substantive scientific blocks without grounding", () => {
   const draft = clone();
-  draft.blocks[0].claims[0].grounding = {
+  scientificClaim(draft).grounding = {
     factIds: [],
     interpretationClaimIds: [],
     evidenceAnchorIds: [],
@@ -156,54 +163,72 @@ test("rejects substantive scientific blocks without grounding", () => {
   expectCode(draft, "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED");
 });
 
-test("authoritative prohibitions do not come from or disappear with model output", () => {
+test("a scientific equivalence claim cannot masquerade as a boundary explanation", () => {
   const draft = clone();
-  assert.equal("inferenceLimits" in draft, false);
-  draft.blocks[0].claims[0].inferenceBoundaryUses = [
-    { boundaryId: "do_not_infer_individual_dose_effect", use: "asserted_as_conclusion" },
-  ];
-  expectCode(draft, "UNSUPPORTED_CONCLUSION_USED");
-});
-
-test("output cannot redefine an authoritative prohibition as a supported conclusion", () => {
-  const draft = {
-    ...clone(),
-    inferenceLimits: {
-      supportedConclusions: [{ id: "do_not_infer_equivalence" }],
-      unsupportedConclusions: [],
-    },
-  };
+  draft.blocks[0].claims[0] = {
+    ...scientificClaim(draft),
+    text: "Treatment and placebo are equivalent.",
+    statementKind: "boundary_explanation",
+    boundaryId: "do_not_infer_equivalence",
+  } as never;
   expectCode(draft, "DRAFT_SCHEMA_INVALID");
 });
 
-test("an actual equivalence assertion remains rejected", () => {
+test("accepts a structural boundary reference without analyzing natural-language text", () => {
   const draft = clone();
-  draft.blocks[0].claims[0].text = "Treatment and placebo are equivalent.";
-  draft.blocks[0].claims[0].inferenceBoundaryUses = [
-    { boundaryId: "do_not_infer_equivalence", use: "asserted_as_conclusion" },
-  ];
-  expectCode(draft, "UNSUPPORTED_CONCLUSION_USED");
-});
-
-test("a structured boundary explanation is accepted without textual negation analysis", () => {
-  const draft = clone();
-  draft.blocks[0].claims[0].text = "The data do not establish equivalence.";
-  draft.blocks[0].claims[0].inferenceBoundaryUses = [
-    { boundaryId: "do_not_infer_equivalence", use: "respected_boundary" },
-  ];
+  draft.blocks[0].claims.push({
+    id: "equivalence-boundary",
+    statementKind: "boundary_explanation",
+    boundaryId: "do_not_infer_equivalence",
+  });
   assert.deepEqual(validate(draft), { valid: true, errors: [] });
 });
 
-test("individual-dose and mechanistic conclusions remain prohibited", () => {
-  for (const [boundaryId, text] of [
+test("boundary explanations cannot carry prohibited epistemic statuses", () => {
+  for (const epistemicStatus of [
+    "equivalence",
+    "superiority",
+    "demonstrated_causality",
+    "therapeutic_recommendation",
+  ] as const) {
+    const draft = clone();
+    draft.blocks[0].claims.push({
+      id: `invalid-boundary-${epistemicStatus}`,
+      statementKind: "boundary_explanation",
+      boundaryId: "do_not_infer_equivalence",
+      epistemicStatus,
+    } as never);
+    expectCode(draft, "DRAFT_SCHEMA_INVALID");
+  }
+});
+
+test("ordinary scientific claims cannot use boundary-reference fields to escape validation", () => {
+  const draft = clone();
+  Object.assign(scientificClaim(draft), {
+    boundaryId: "do_not_infer_equivalence",
+  });
+  expectCode(draft, "DRAFT_SCHEMA_INVALID");
+});
+
+test("rejects an unknown boundary explanation ID", () => {
+  const draft = clone();
+  draft.blocks[0].claims.push({
+    id: "unknown-boundary",
+    statementKind: "boundary_explanation",
+    boundaryId: "unknown-boundary-id",
+  });
+  expectCode(draft, "INFERENCE_BOUNDARY_NOT_AUTHORIZED");
+});
+
+test("individual-dose and mechanistic inference assertions remain prohibited", () => {
+  for (const [inferenceId, text] of [
     ["do_not_infer_individual_dose_effect", "The pooled result establishes each dose's effect."],
     ["do_not_infer_causality", "The proposed mechanism caused the clinical result."],
   ] as const) {
     const draft = clone();
-    draft.blocks[0].claims[0].text = text;
-    draft.blocks[0].claims[0].inferenceBoundaryUses = [
-      { boundaryId, use: "asserted_as_conclusion" },
-    ];
+    const claim = scientificClaim(draft);
+    claim.text = text;
+    claim.assertedInferenceIds = [inferenceId];
     expectCode(draft, "UNSUPPORTED_CONCLUSION_USED");
   }
 });
@@ -216,25 +241,25 @@ for (const [status, code] of [
 ] as const)
   test(`rejects unauthorized ${status}`, () => {
     const draft = clone();
-    draft.blocks[0].claims[0].epistemicStatus = status;
+    scientificClaim(draft).epistemicStatus = status;
     expectCode(draft, code);
   });
 
 test("rejects a full-text claim when only the abstract is authorized", () => {
   const draft = clone();
-  draft.blocks[0].claims[0].sourceRequirement = "authorized_full_text";
+  scientificClaim(draft).sourceRequirement = "authorized_full_text";
   expectCode(draft, "FULL_TEXT_NOT_AVAILABLE");
 });
 
 test("rejects a prose number that is not declared structurally", () => {
   const draft = clone();
-  draft.blocks[0].claims[0].text += " O valor inventado foi 999.";
+  scientificClaim(draft).text += " O valor inventado foi 999.";
   expectCode(draft, "QUANTITATIVE_CLAIM_NOT_DECLARED");
 });
 
 test("accepts estimate, interval bounds, confidence level, p value, and timepoint from one result fact", () => {
   const draft = clone();
-  const claim = draft.blocks[0].claims[0];
+  const claim = scientificClaim(draft);
   claim.text = "A estimativa foi −1,4 ponto (IC 95% de −3,9 a 1,2; p=0,29) em 16 semanas.";
   claim.grounding.factIds = ["pmid:42717033:result-kccq"];
   claim.quantitativeClaims = [
@@ -250,7 +275,7 @@ test("accepts estimate, interval bounds, confidence level, p value, and timepoin
 
 test("accepts typed sample size, percentage, dose, and duration quantities", () => {
   const draft = clone();
-  const claim = draft.blocks[0].claims[0];
+  const claim = scientificClaim(draft);
   claim.text = "Foram 711 participantes, 45% mulheres, com dose de 2,5 mg por 48 semanas.";
   claim.grounding.factIds = [
     "pmid:42717033:sample-size",
@@ -269,7 +294,7 @@ test("accepts typed sample size, percentage, dose, and duration quantities", () 
 
 test("rejects a number and unit drawn from different semantic fields of the same fact", () => {
   const draft = clone();
-  const claim = draft.blocks[0].claims[0];
+  const claim = scientificClaim(draft);
   claim.text = "O resultado foi 95 pontos.";
   claim.grounding.factIds = ["pmid:42717033:result-kccq"];
   claim.quantitativeClaims = [{ value: 95, unit: "point", factId: "pmid:42717033:result-kccq" }];
@@ -278,7 +303,7 @@ test("rejects a number and unit drawn from different semantic fields of the same
 
 test("preserves a Unicode minus sign when matching prose to declarations", () => {
   const draft = clone();
-  const claim = draft.blocks[0].claims[0];
+  const claim = scientificClaim(draft);
   claim.text = "A diferença foi −1.4 ponto.";
   claim.grounding.factIds = ["pmid:42717033:result-kccq"];
   claim.quantitativeClaims = [{ value: 1.4, unit: "point", factId: "pmid:42717033:result-kccq" }];
@@ -290,7 +315,7 @@ test("preserves a Unicode minus sign when matching prose to declarations", () =>
 test("does not treat numbers embedded in scientific endpoint names as standalone quantities", () => {
   for (const text of ["O desfecho foi 6-minute walk distance.", "O desfecho foi 6MWD."]) {
     const draft = clone();
-    const claim = draft.blocks[0].claims[0];
+    const claim = scientificClaim(draft);
     claim.text = text;
     claim.grounding.factIds = ["pmid:42717033:endpoint-6mwd"];
     claim.quantitativeClaims = [];
@@ -300,7 +325,7 @@ test("does not treat numbers embedded in scientific endpoint names as standalone
 
 test("keeps a standalone translated duration subject to quantitative declaration", () => {
   const draft = clone();
-  const claim = draft.blocks[0].claims[0];
+  const claim = scientificClaim(draft);
   claim.text = "O desfecho foi caminhada de 6 minutos.";
   claim.grounding.factIds = ["pmid:42717033:endpoint-6mwd"];
   claim.quantitativeClaims = [];

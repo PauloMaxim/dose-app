@@ -31,6 +31,7 @@ export type EditorialDraftValidationCode =
   | "GROUNDING_KIND_INCOMPATIBLE"
   | "UNSUPPORTED_CONCLUSION_USED"
   | "INFERENCE_BOUNDARY_NOT_AUTHORIZED"
+  | "INFERENCE_ASSERTION_NOT_AUTHORIZED"
   | "FULL_TEXT_NOT_AVAILABLE"
   | "EQUIVALENCE_NOT_SUPPORTED"
   | "SUPERIORITY_NOT_SUPPORTED"
@@ -64,9 +65,13 @@ const substantiveKinds = new Set([
   "contextual_explanation",
 ]);
 
-function hasGrounding(
-  grounding: ScientificEditorialDraft["blocks"][number]["claims"][number]["grounding"],
-) {
+function hasGrounding(grounding: {
+  factIds: string[];
+  interpretationClaimIds: string[];
+  evidenceAnchorIds: string[];
+  sourceDocumentIds: string[];
+  externalContextReferenceIds: string[];
+}) {
   return Object.values(grounding).some((values) => values.length > 0);
 }
 
@@ -266,6 +271,15 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
   for (const [blockIndex, block] of draft.blocks.entries())
     for (const [claimIndex, claim] of block.claims.entries()) {
       const path = `blocks.${blockIndex}.claims.${claimIndex}`;
+      if (claim.statementKind === "boundary_explanation") {
+        if (!authoritativeBoundaries.has(claim.boundaryId))
+          add(
+            "INFERENCE_BOUNDARY_NOT_AUTHORIZED",
+            `${path}.boundaryId`,
+            `Unknown authoritative inference boundary: ${claim.boundaryId}`,
+          );
+        continue;
+      }
       if (substantiveKinds.has(claim.statementKind) && !hasGrounding(claim.grounding))
         add(
           "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED",
@@ -333,18 +347,18 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
             `${path}.grounding.externalContextReferenceIds`,
             `Unknown context reference: ${referenceId}`,
           );
-      for (const [boundaryIndex, boundary] of claim.inferenceBoundaryUses.entries()) {
-        if (!authoritativeBoundaries.has(boundary.boundaryId))
-          add(
-            "INFERENCE_BOUNDARY_NOT_AUTHORIZED",
-            `${path}.inferenceBoundaryUses.${boundaryIndex}.boundaryId`,
-            `Unknown authoritative inference boundary: ${boundary.boundaryId}`,
-          );
-        else if (boundary.use === "asserted_as_conclusion")
+      for (const [inferenceIndex, inferenceId] of claim.assertedInferenceIds.entries()) {
+        if (authoritativeBoundaries.has(inferenceId))
           add(
             "UNSUPPORTED_CONCLUSION_USED",
-            `${path}.inferenceBoundaryUses.${boundaryIndex}`,
-            `Claim asserts prohibited conclusion: ${boundary.boundaryId}`,
+            `${path}.assertedInferenceIds.${inferenceIndex}`,
+            `Claim asserts prohibited conclusion: ${inferenceId}`,
+          );
+        else
+          add(
+            "INFERENCE_ASSERTION_NOT_AUTHORIZED",
+            `${path}.assertedInferenceIds.${inferenceIndex}`,
+            `Unknown authoritative inference assertion: ${inferenceId}`,
           );
       }
       if (
