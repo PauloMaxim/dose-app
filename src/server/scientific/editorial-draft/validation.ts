@@ -9,8 +9,10 @@ import {
   SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS,
   scientificEditorialDraftSchema,
   type ContextualScientificMaterial,
+  type EditorialGenerationProfile,
   type ScientificEditorialDraft,
 } from "./contracts";
+import { deriveEditorialScientificAuthority } from "./scientific-authority";
 
 const structuralUnits = SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS;
 
@@ -18,6 +20,7 @@ export type EditorialDraftValidationCode =
   | "DRAFT_SCHEMA_INVALID"
   | "DRAFT_LINEAGE_MISMATCH"
   | "DRAFT_ARTICLE_MISMATCH"
+  | "DRAFT_LANGUAGE_MISMATCH"
   | "FACT_NOT_FOUND"
   | "INTERPRETATION_CLAIM_NOT_FOUND"
   | "EVIDENCE_ANCHOR_NOT_FOUND"
@@ -27,6 +30,7 @@ export type EditorialDraftValidationCode =
   | "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED"
   | "GROUNDING_KIND_INCOMPATIBLE"
   | "UNSUPPORTED_CONCLUSION_USED"
+  | "INFERENCE_BOUNDARY_NOT_AUTHORIZED"
   | "FULL_TEXT_NOT_AVAILABLE"
   | "EQUIVALENCE_NOT_SUPPORTED"
   | "SUPERIORITY_NOT_SUPPORTED"
@@ -49,6 +53,7 @@ export interface ValidateScientificEditorialDraftInput {
   factSet: RCTScientificFactSet;
   interpretationArtifact: ScientificInterpretationArtifact;
   contextualMaterial?: ContextualScientificMaterial[];
+  editorialProfile: EditorialGenerationProfile;
   /** IDs are supplied only by a future, separately authorized context acquisition boundary. */
   authorizedExternalContextReferenceIds?: string[];
 }
@@ -209,6 +214,12 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
       "articleId",
       "Draft and scientific inputs must describe one article.",
     );
+  if (draft.language !== input.editorialProfile.targetLanguage)
+    add(
+      "DRAFT_LANGUAGE_MISMATCH",
+      "language",
+      "Draft language must equal the editorial policy targetLanguage.",
+    );
   const lineage = draft.inputLineage;
   if (
     lineage.sourceSetId !== input.sourceSet.id ||
@@ -247,21 +258,11 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
     }
   }
 
-  const unsupported = new Set(draft.inferenceLimits.unsupportedConclusions.map(({ id }) => id));
-  for (const [group, conclusions] of Object.entries(draft.inferenceLimits))
-    for (const [index, conclusion] of conclusions.entries()) {
-      const path = `inferenceLimits.${group}.${index}`;
-      for (const factId of conclusion.factIds)
-        if (!factIds.has(factId))
-          add("FACT_NOT_FOUND", `${path}.factIds`, `Unknown conclusion fact: ${factId}`);
-      for (const interpretationId of conclusion.interpretationClaimIds)
-        if (!interpretationIds.has(interpretationId))
-          add(
-            "INTERPRETATION_CLAIM_NOT_FOUND",
-            `${path}.interpretationClaimIds`,
-            `Unknown conclusion interpretation: ${interpretationId}`,
-          );
-    }
+  const authoritativeBoundaries = new Set(
+    deriveEditorialScientificAuthority(input.interpretationArtifact).inferenceBoundaries.map(
+      ({ id }) => id,
+    ),
+  );
   for (const [blockIndex, block] of draft.blocks.entries())
     for (const [claimIndex, claim] of block.claims.entries()) {
       const path = `blocks.${blockIndex}.claims.${claimIndex}`;
@@ -332,13 +333,20 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
             `${path}.grounding.externalContextReferenceIds`,
             `Unknown context reference: ${referenceId}`,
           );
-      for (const conclusionId of claim.conclusionIds)
-        if (unsupported.has(conclusionId))
+      for (const [boundaryIndex, boundary] of claim.inferenceBoundaryUses.entries()) {
+        if (!authoritativeBoundaries.has(boundary.boundaryId))
+          add(
+            "INFERENCE_BOUNDARY_NOT_AUTHORIZED",
+            `${path}.inferenceBoundaryUses.${boundaryIndex}.boundaryId`,
+            `Unknown authoritative inference boundary: ${boundary.boundaryId}`,
+          );
+        else if (boundary.use === "asserted_as_conclusion")
           add(
             "UNSUPPORTED_CONCLUSION_USED",
-            `${path}.conclusionIds`,
-            `Claim invokes prohibited conclusion: ${conclusionId}`,
+            `${path}.inferenceBoundaryUses.${boundaryIndex}`,
+            `Claim asserts prohibited conclusion: ${boundary.boundaryId}`,
           );
+      }
       if (
         claim.sourceRequirement === "authorized_full_text" &&
         !input.sourceSet.coverage.hasAuthorizedFullText

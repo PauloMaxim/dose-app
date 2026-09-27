@@ -18,6 +18,8 @@ import {
   SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID,
 } from "./real-generation.server";
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION, SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT } from "./prompt";
+import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
+import { deriveEditorialScientificAuthority } from "./scientific-authority";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -31,11 +33,13 @@ const input = {
   factSet: pmid42717033FactSet,
   interpretationArtifact: pmid42717033Interpretation,
   contextualMaterial: [],
+  editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
 };
 const providerRequest = {
   promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
   systemPrompt: SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
   input,
+  scientificAuthority: deriveEditorialScientificAuthority(pmid42717033Interpretation),
 };
 const config = {
   apiKey: "test-only-not-a-secret",
@@ -379,6 +383,8 @@ test("the authorized payload contains no golden or preview material", async () =
     },
   );
   assert.doesNotMatch(serializedInput, /DoseDocument|approvedDocument|preview|manual aprovada/i);
+  assert.match(serializedInput, /"targetLanguage":"pt-BR"/);
+  assert.match(serializedInput, /"do_not_infer_individual_dose_effect"/);
   const implementation = await readFile(
     "src/server/scientific/editorial-draft/real-generation.server.ts",
     "utf8",

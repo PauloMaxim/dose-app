@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v1" as const;
+export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v2" as const;
+export const EDITORIAL_GENERATION_PROFILE_VERSION = "editorial-generation-profile.v1" as const;
 export const CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION = "contextual-scientific-material.v1" as const;
 
 /** Canonical units for numeric fact fields whose rct.v1 shape has no explicit `unit` property. */
@@ -70,7 +71,16 @@ export const editorialClaimSchema = z
     ]),
     grounding: claimGroundingSchema,
     epistemicStatus: epistemicStatusSchema.optional(),
-    conclusionIds: z.array(id).default([]),
+    inferenceBoundaryUses: z
+      .array(
+        z
+          .object({
+            boundaryId: id,
+            use: z.enum(["respected_boundary", "asserted_as_conclusion"]),
+          })
+          .strict(),
+      )
+      .default([]),
     quantitativeClaims: z
       .array(z.object({ value: z.number().finite(), unit: id, factId: id }).strict())
       .default([]),
@@ -90,25 +100,6 @@ export const editorialBlockSchema = z
   })
   .strict();
 
-const conclusionSchema = z
-  .object({
-    id,
-    statement: text,
-    factIds: z.array(id).default([]),
-    interpretationClaimIds: z.array(id).default([]),
-    rule: z.enum([
-      "supported_by_inputs",
-      "do_not_infer_equivalence",
-      "do_not_infer_superiority",
-      "do_not_infer_causality",
-      "do_not_recommend_treatment",
-      "do_not_generalize_beyond_study",
-      "do_not_claim_full_text_review",
-      "other",
-    ]),
-  })
-  .strict();
-
 export const scientificEditorialDraftSchema = z
   .object({
     schemaVersion: z.literal(SCIENTIFIC_EDITORIAL_DRAFT_VERSION),
@@ -119,12 +110,6 @@ export const scientificEditorialDraftSchema = z
       .object({ sourceSetId: id, evidenceSetId: id, factSetId: id, interpretationArtifactId: id })
       .strict(),
     blocks: z.array(editorialBlockSchema).min(1),
-    inferenceLimits: z
-      .object({
-        supportedConclusions: z.array(conclusionSchema),
-        unsupportedConclusions: z.array(conclusionSchema),
-      })
-      .strict(),
     requiresHumanReview: z.literal(true),
     reviewStatus: z.literal("pending"),
   })
@@ -186,7 +171,18 @@ export const contextualScientificMaterialSchema = z
   })
   .strict();
 
+/** Presentation policy only. It never adds scientific facts or permitted conclusions. */
+export const editorialGenerationProfileSchema = z
+  .object({
+    version: z.literal(EDITORIAL_GENERATION_PROFILE_VERSION),
+    targetLanguage: z.string().regex(/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/),
+    audience: z.literal("health_professionals"),
+    comprehensionDepth: z.literal("progressive"),
+  })
+  .strict();
+
 export type ScientificEditorialDraft = z.infer<typeof scientificEditorialDraftSchema>;
 export type ContextualScientificMaterial = z.infer<typeof contextualScientificMaterialSchema>;
 export type EditorialClaim = z.infer<typeof editorialClaimSchema>;
 export type EditorialBlockKind = z.infer<typeof editorialBlockKindSchema>;
+export type EditorialGenerationProfile = z.infer<typeof editorialGenerationProfileSchema>;

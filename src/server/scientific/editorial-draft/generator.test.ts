@@ -7,6 +7,7 @@ import { ValidatedScientificEditorialDraftGenerator } from "./generator";
 import { pmid42717033ExperimentalDraft } from "./pmid-42717033-experiment.fixture";
 import { projectScientificEditorialDraft } from "./projection";
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION, SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT } from "./prompt";
+import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -20,6 +21,7 @@ const input = {
   factSet: pmid42717033FactSet,
   interpretationArtifact: pmid42717033Interpretation,
   contextualMaterial: [],
+  editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
 };
 
 test("the deterministic provider exercises structured generation without network I/O", async () => {
@@ -28,6 +30,12 @@ test("the deterministic provider exercises structured generation without network
   const result = await generator.generate(input);
   assert.equal(result.ok, true);
   assert.deepEqual(provider.calls, [SCIENTIFIC_EDITORIAL_PROMPT_VERSION]);
+  assert.equal(provider.requests[0].input.editorialProfile.targetLanguage, "pt-BR");
+  assert.ok(
+    provider.requests[0].scientificAuthority.inferenceBoundaries.some(
+      ({ id }) => id === "do_not_infer_individual_dose_effect",
+    ),
+  );
   if (result.ok) {
     assert.equal(result.draft.requiresHumanReview, true);
     assert.equal(result.draft.reviewStatus, "pending");
@@ -85,13 +93,24 @@ test("the generic prompt contains no canary-specific scientific content", () => 
 });
 
 test("the generation prompt declares every canonical unit synthesized by validation", () => {
-  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v2");
+  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v3");
   for (const unit of Object.values(SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS))
     assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, new RegExp(`"${unit}"`));
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /sample sizes, event counts, and denominators/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /allocation ratio parts/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /confidenceInterval\.value\.levelPercent/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /pValue\.value\.value/);
+});
+
+test("the editorial profile requires supported progressive comprehension without padding", () => {
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /targetLanguage "pt-BR"/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Do not translate IDs, canonical units/);
+  assert.match(
+    SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+    /progressive understanding rather than brevity/i,
+  );
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /omit unsupported material/i);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /without padding, minimum length/i);
 });
 
 test("experiment remains isolated from public surfaces and contains no remote provider", async () => {

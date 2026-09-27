@@ -19,6 +19,7 @@ import {
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION } from "./prompt";
 import type { EditorialDraftValidationIssue } from "./validation";
 import type { ScientificEditorialDraft } from "./contracts";
+import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -71,6 +72,7 @@ function canaryInput(): GenerateEditorialDraftInput {
     factSet: pmid42717033FactSet,
     interpretationArtifact: pmid42717033Interpretation,
     contextualMaterial: [],
+    editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
   };
 }
 

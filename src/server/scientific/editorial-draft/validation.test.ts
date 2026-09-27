@@ -6,6 +6,7 @@ import {
   type ScientificEditorialDraft,
 } from "./contracts";
 import { validateScientificEditorialDraft } from "./validation";
+import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -14,7 +15,7 @@ import {
 } from "../knowledge-representation/pmid-42717033.fixture";
 
 const base = scientificEditorialDraftSchema.parse({
-  schemaVersion: "scientific-editorial-draft.v1",
+  schemaVersion: "scientific-editorial-draft.v2",
   id: "editorial:pmid:42717033:pt-BR:v1",
   articleId: "pmid:42717033",
   language: "pt-BR",
@@ -42,7 +43,7 @@ const base = scientificEditorialDraftSchema.parse({
             externalContextReferenceIds: [],
           },
           epistemicStatus: "observed_clinical_result",
-          conclusionIds: ["bounded-negative-result"],
+          inferenceBoundaryUses: [],
         },
       ],
     },
@@ -63,31 +64,11 @@ const base = scientificEditorialDraftSchema.parse({
             externalContextReferenceIds: [],
           },
           epistemicStatus: "source_coverage",
-          conclusionIds: [],
+          inferenceBoundaryUses: [],
         },
       ],
     },
   ],
-  inferenceLimits: {
-    supportedConclusions: [
-      {
-        id: "bounded-negative-result",
-        statement: "Não houve benefício demonstrável nos desfechos definidos.",
-        factIds: ["pmid:42717033:result-kccq", "pmid:42717033:result-6mwd"],
-        interpretationClaimIds: ["pmid:42717033:interpretation:coprimary-results"],
-        rule: "supported_by_inputs",
-      },
-    ],
-    unsupportedConclusions: [
-      {
-        id: "mpo-does-not-participate",
-        statement: "A MPO não participa da doença.",
-        factIds: [],
-        interpretationClaimIds: [],
-        rule: "do_not_infer_causality",
-      },
-    ],
-  },
   requiresHumanReview: true,
   reviewStatus: "pending",
 });
@@ -104,6 +85,7 @@ function validate(draft: unknown = base, contextualMaterial: never[] = []) {
     factSet: pmid42717033FactSet,
     interpretationArtifact: pmid42717033Interpretation,
     contextualMaterial,
+    editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
   });
 }
 
@@ -157,6 +139,7 @@ test("rejects contextual material without provenance", () => {
     factSet: pmid42717033FactSet,
     interpretationArtifact: pmid42717033Interpretation,
     contextualMaterial: [context],
+    editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
   });
   assert.ok(report.errors.some(({ code }) => code === "CONTEXT_PROVENANCE_REQUIRED"));
 });
@@ -173,10 +156,56 @@ test("rejects substantive scientific blocks without grounding", () => {
   expectCode(draft, "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED");
 });
 
-test("rejects a claim that invokes an unsupported conclusion", () => {
+test("authoritative prohibitions do not come from or disappear with model output", () => {
   const draft = clone();
-  draft.blocks[0].claims[0].conclusionIds = ["mpo-does-not-participate"];
+  assert.equal("inferenceLimits" in draft, false);
+  draft.blocks[0].claims[0].inferenceBoundaryUses = [
+    { boundaryId: "do_not_infer_individual_dose_effect", use: "asserted_as_conclusion" },
+  ];
   expectCode(draft, "UNSUPPORTED_CONCLUSION_USED");
+});
+
+test("output cannot redefine an authoritative prohibition as a supported conclusion", () => {
+  const draft = {
+    ...clone(),
+    inferenceLimits: {
+      supportedConclusions: [{ id: "do_not_infer_equivalence" }],
+      unsupportedConclusions: [],
+    },
+  };
+  expectCode(draft, "DRAFT_SCHEMA_INVALID");
+});
+
+test("an actual equivalence assertion remains rejected", () => {
+  const draft = clone();
+  draft.blocks[0].claims[0].text = "Treatment and placebo are equivalent.";
+  draft.blocks[0].claims[0].inferenceBoundaryUses = [
+    { boundaryId: "do_not_infer_equivalence", use: "asserted_as_conclusion" },
+  ];
+  expectCode(draft, "UNSUPPORTED_CONCLUSION_USED");
+});
+
+test("a structured boundary explanation is accepted without textual negation analysis", () => {
+  const draft = clone();
+  draft.blocks[0].claims[0].text = "The data do not establish equivalence.";
+  draft.blocks[0].claims[0].inferenceBoundaryUses = [
+    { boundaryId: "do_not_infer_equivalence", use: "respected_boundary" },
+  ];
+  assert.deepEqual(validate(draft), { valid: true, errors: [] });
+});
+
+test("individual-dose and mechanistic conclusions remain prohibited", () => {
+  for (const [boundaryId, text] of [
+    ["do_not_infer_individual_dose_effect", "The pooled result establishes each dose's effect."],
+    ["do_not_infer_causality", "The proposed mechanism caused the clinical result."],
+  ] as const) {
+    const draft = clone();
+    draft.blocks[0].claims[0].text = text;
+    draft.blocks[0].claims[0].inferenceBoundaryUses = [
+      { boundaryId, use: "asserted_as_conclusion" },
+    ];
+    expectCode(draft, "UNSUPPORTED_CONCLUSION_USED");
+  }
 });
 
 for (const [status, code] of [
@@ -284,4 +313,10 @@ test("the schema prevents the editorial layer from bypassing review", () => {
     { requiresHumanReview: true, reviewStatus: "approved" },
   ])
     expectCode({ ...structuredClone(base), ...mutation }, "DRAFT_SCHEMA_INVALID");
+});
+
+test("rejects a declared language different from targetLanguage", () => {
+  const draft = clone();
+  draft.language = "en";
+  expectCode(draft, "DRAFT_LANGUAGE_MISMATCH");
 });

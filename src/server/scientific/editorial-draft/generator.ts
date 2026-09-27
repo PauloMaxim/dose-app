@@ -7,10 +7,15 @@ import type {
 import {
   scientificEditorialDraftSchema,
   type ContextualScientificMaterial,
+  type EditorialGenerationProfile,
   type ScientificEditorialDraft,
 } from "./contracts";
 import type { ScientificEditorialProvider } from "./provider.server";
-import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION, SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT } from "./prompt";
+import {
+  buildScientificEditorialSystemPrompt,
+  SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
+} from "./prompt";
+import { deriveEditorialScientificAuthority } from "./scientific-authority";
 import { validateScientificEditorialDraft, type EditorialDraftValidationIssue } from "./validation";
 
 /** Boundary only: implementations must not treat generated prose as scientific authority. */
@@ -20,6 +25,7 @@ export interface GenerateEditorialDraftInput {
   factSet: RCTScientificFactSet;
   interpretationArtifact: ScientificInterpretationArtifact;
   contextualMaterial: ContextualScientificMaterial[];
+  editorialProfile: EditorialGenerationProfile;
 }
 
 /** A future provider must return a pending draft and then pass it through independent validation. */
@@ -41,10 +47,12 @@ export class ValidatedScientificEditorialDraftGenerator {
   constructor(private readonly provider: ScientificEditorialProvider) {}
 
   async generate(input: GenerateEditorialDraftInput): Promise<EditorialGenerationResult> {
+    const scientificAuthority = deriveEditorialScientificAuthority(input.interpretationArtifact);
     const output = await this.provider.generate({
       promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
-      systemPrompt: SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
+      systemPrompt: buildScientificEditorialSystemPrompt(input.editorialProfile),
       input,
+      scientificAuthority,
     });
     const parsed = scientificEditorialDraftSchema.safeParse(output);
     const report = validateScientificEditorialDraft({

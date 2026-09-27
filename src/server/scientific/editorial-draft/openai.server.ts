@@ -116,7 +116,17 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
   ) {}
 
   async generate(request: ScientificEditorialProviderRequest): Promise<unknown> {
-    const input = JSON.stringify(request.input);
+    const input = JSON.stringify({
+      scientificAuthority: {
+        sourceSet: request.input.sourceSet,
+        evidenceSet: request.input.evidenceSet,
+        factSet: request.input.factSet,
+        interpretationArtifact: request.input.interpretationArtifact,
+        contextualMaterial: request.input.contextualMaterial,
+        inferenceBoundaries: request.scientificAuthority.inferenceBoundaries,
+      },
+      editorialPolicy: request.input.editorialProfile,
+    });
     if (input.length > this.config.maxInputCharacters)
       throw new ScientificEditorialProviderError(
         "payload_too_large",
