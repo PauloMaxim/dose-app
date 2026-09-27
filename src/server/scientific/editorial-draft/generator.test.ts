@@ -8,6 +8,7 @@ import { pmid42717033ExperimentalDraft } from "./pmid-42717033-experiment.fixtur
 import { projectScientificEditorialDraft } from "./projection";
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION, SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT } from "./prompt";
 import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
+import { deriveEditorialScientificAuthority } from "./scientific-authority";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -35,6 +36,16 @@ test("the deterministic provider exercises structured generation without network
     provider.requests[0].scientificAuthority.inferenceBoundaries.some(
       ({ id }) => id === "do_not_infer_individual_dose_effect",
     ),
+  );
+  assert.deepEqual(
+    provider.requests[0].scientificAuthority,
+    deriveEditorialScientificAuthority(pmid42717033FactSet, pmid42717033Interpretation),
+  );
+  assert.deepEqual(
+    provider.requests[0].scientificAuthority.quantitativeClaims.filter(
+      ({ factId }) => factId === "pmid:42717033:endpoint-6mwd",
+    ),
+    [{ factId: "pmid:42717033:endpoint-6mwd", value: 16, unit: "week" }],
   );
   if (result.ok) {
     assert.equal(result.deterministicValidation, "passed");
@@ -130,6 +141,8 @@ test("the generation prompt declares every canonical unit synthesized by validat
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /allocation ratio parts/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /confidenceInterval\.value\.levelPercent/);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /pValue\.value\.value/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /complete allowlist/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /scientific nomenclature are names/i);
 });
 
 test("the editorial profile requires supported progressive comprehension without padding", () => {

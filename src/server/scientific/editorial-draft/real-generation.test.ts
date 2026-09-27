@@ -40,7 +40,10 @@ const providerRequest = {
   promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
   systemPrompt: SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT,
   input,
-  scientificAuthority: deriveEditorialScientificAuthority(pmid42717033Interpretation),
+  scientificAuthority: deriveEditorialScientificAuthority(
+    pmid42717033FactSet,
+    pmid42717033Interpretation,
+  ),
 };
 const config = {
   apiKey: "test-only-not-a-secret",
@@ -131,6 +134,13 @@ test("OpenAI adapter requests strict schema and parses structured output", async
   assert.equal(captured?.store, false);
   assert.deepEqual(captured?.reasoning, { mode: "standard", effort: "medium" });
   assert.equal(captured?.max_output_tokens, 25_000);
+  const providerInput = JSON.parse(String(captured?.input)) as {
+    scientificAuthority: { quantitativeClaims: unknown };
+  };
+  assert.deepEqual(
+    providerInput.scientificAuthority.quantitativeClaims,
+    providerRequest.scientificAuthority.quantitativeClaims,
+  );
   const blockSchema = (
     scientificEditorialDraftJsonSchema as {
       properties: {
