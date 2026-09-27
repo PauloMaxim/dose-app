@@ -52,7 +52,14 @@ export type RealEditorialGenerationResult = {
   draft?: ScientificEditorialDraft;
   /** Schema-valid candidate; deterministically rejected, unapproved, and pending human review. */
   candidateDraft?: ScientificEditorialDraft;
-  error?: { code: string; message: string };
+  error?: {
+    code: string;
+    message: string;
+    httpStatus?: number;
+    providerCategory?: string;
+    providerCode?: string;
+    requestId?: string;
+  };
 };
 
 export interface RealEditorialGenerationDependencies {
@@ -168,7 +175,7 @@ export async function runRealEditorialGeneration(
       ...observedMetrics(),
       validationStatus: "not_run",
       validationErrors: [],
-      error: { code: typed.code, message: typed.message },
+      error: { code: typed.code, message: typed.message, ...typed.details },
     };
   }
 }
