@@ -258,6 +258,26 @@ test("preserves a Unicode minus sign when matching prose to declarations", () =>
   assert.ok(report.errors.some(({ code }) => code === "QUANTITATIVE_CLAIM_NOT_IN_FACT"));
 });
 
+test("does not treat numbers embedded in scientific endpoint names as standalone quantities", () => {
+  for (const text of ["O desfecho foi 6-minute walk distance.", "O desfecho foi 6MWD."]) {
+    const draft = clone();
+    const claim = draft.blocks[0].claims[0];
+    claim.text = text;
+    claim.grounding.factIds = ["pmid:42717033:endpoint-6mwd"];
+    claim.quantitativeClaims = [];
+    assert.deepEqual(validate(draft), { valid: true, errors: [] });
+  }
+});
+
+test("keeps a standalone translated duration subject to quantitative declaration", () => {
+  const draft = clone();
+  const claim = draft.blocks[0].claims[0];
+  claim.text = "O desfecho foi caminhada de 6 minutos.";
+  claim.grounding.factIds = ["pmid:42717033:endpoint-6mwd"];
+  claim.quantitativeClaims = [];
+  expectCode(draft, "QUANTITATIVE_CLAIM_NOT_DECLARED");
+});
+
 test("the schema prevents the editorial layer from bypassing review", () => {
   for (const mutation of [
     { requiresHumanReview: false, reviewStatus: "pending" },

@@ -3,6 +3,14 @@ import { z } from "zod";
 export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v1" as const;
 export const CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION = "contextual-scientific-material.v1" as const;
 
+/** Canonical units for numeric fact fields whose rct.v1 shape has no explicit `unit` property. */
+export const SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS = {
+  participantCount: "participant",
+  allocationPart: "allocation_part",
+  confidenceLevelPercent: "percent",
+  pValue: "p_value",
+} as const;
+
 const id = z.string().trim().min(1).max(200);
 const text = z.string().trim().min(1).max(10_000);
 

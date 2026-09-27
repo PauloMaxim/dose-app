@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { DeterministicScientificEditorialProvider } from "./fake-provider.server";
+import { SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS } from "./contracts";
 import { ValidatedScientificEditorialDraftGenerator } from "./generator";
 import { pmid42717033ExperimentalDraft } from "./pmid-42717033-experiment.fixture";
 import { projectScientificEditorialDraft } from "./projection";
@@ -81,6 +82,16 @@ test("the generic prompt contains no canary-specific scientific content", () => 
   );
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /never decide what is true/i);
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /Never invent an ID/i);
+});
+
+test("the generation prompt declares every canonical unit synthesized by validation", () => {
+  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v2");
+  for (const unit of Object.values(SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS))
+    assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, new RegExp(`"${unit}"`));
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /sample sizes, event counts, and denominators/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /allocation ratio parts/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /confidenceInterval\.value\.levelPercent/);
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /pValue\.value\.value/);
 });
 
 test("experiment remains isolated from public surfaces and contains no remote provider", async () => {

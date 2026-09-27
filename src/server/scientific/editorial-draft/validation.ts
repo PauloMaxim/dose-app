@@ -6,10 +6,13 @@ import type {
 } from "../knowledge-representation/editorial-pipeline";
 import type { ScientificFact } from "../knowledge-representation/contracts";
 import {
+  SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS,
   scientificEditorialDraftSchema,
   type ContextualScientificMaterial,
   type ScientificEditorialDraft,
 } from "./contracts";
+
+const structuralUnits = SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS;
 
 export type EditorialDraftValidationCode =
   | "DRAFT_SCHEMA_INVALID"
@@ -77,12 +80,14 @@ function factQuantities(fact: ScientificFact): FactQuantity[] {
   if (!value) return [];
   switch (value.type) {
     case "population_sample_size":
-      return [{ value: value.value, unit: "participant" }];
+      return [{ value: value.value, unit: structuralUnits.participantCount }];
     case "population_characteristic": {
       const denominator = availableValue(value.denominator);
       return [
         value.value,
-        ...(denominator === undefined ? [] : [{ value: denominator, unit: "participant" }]),
+        ...(denominator === undefined
+          ? []
+          : [{ value: denominator, unit: structuralUnits.participantCount }]),
       ];
     }
     case "eligibility":
@@ -93,11 +98,14 @@ function factQuantities(fact: ScientificFact): FactQuantity[] {
         ...(dose ? [dose] : []),
         ...(value.randomizedSampleSize === undefined
           ? []
-          : [{ value: value.randomizedSampleSize, unit: "participant" }]),
+          : [{ value: value.randomizedSampleSize, unit: structuralUnits.participantCount }]),
       ];
     }
     case "allocation_ratio":
-      return value.allocations.map(({ parts }) => ({ value: parts, unit: "allocation_part" }));
+      return value.allocations.map(({ parts }) => ({
+        value: parts,
+        unit: structuralUnits.allocationPart,
+      }));
     case "treatment_duration":
       return [value.duration];
     case "endpoint_timepoint":
@@ -113,10 +121,10 @@ function factQuantities(fact: ScientificFact): FactQuantity[] {
           ? [
               { value: interval.lower, unit: value.estimate.unit },
               { value: interval.upper, unit: value.estimate.unit },
-              { value: interval.levelPercent, unit: "percent" },
+              { value: interval.levelPercent, unit: structuralUnits.confidenceLevelPercent },
             ]
           : []),
-        ...(pValue ? [{ value: pValue.value, unit: "p_value" }] : []),
+        ...(pValue ? [{ value: pValue.value, unit: structuralUnits.pValue }] : []),
         value.timepoint,
       ];
     }
@@ -125,8 +133,12 @@ function factQuantities(fact: ScientificFact): FactQuantity[] {
       const denominator = availableValue(value.denominator);
       return [
         { value: value.estimate.value, unit: value.estimate.unit },
-        ...(eventCount === undefined ? [] : [{ value: eventCount, unit: "participant" }]),
-        ...(denominator === undefined ? [] : [{ value: denominator, unit: "participant" }]),
+        ...(eventCount === undefined
+          ? []
+          : [{ value: eventCount, unit: structuralUnits.participantCount }]),
+        ...(denominator === undefined
+          ? []
+          : [{ value: denominator, unit: structuralUnits.participantCount }]),
         value.timepoint,
       ];
     }
@@ -134,15 +146,20 @@ function factQuantities(fact: ScientificFact): FactQuantity[] {
       const pValue = availableValue(value.pValue);
       return [
         value.margin,
-        { value: value.confidenceLevelPercent, unit: "percent" },
-        ...(pValue ? [{ value: pValue.value, unit: "p_value" }] : []),
+        {
+          value: value.confidenceLevelPercent,
+          unit: structuralUnits.confidenceLevelPercent,
+        },
+        ...(pValue ? [{ value: pValue.value, unit: structuralUnits.pValue }] : []),
       ];
     }
     case "safety_event": {
       const denominator = availableValue(value.denominator);
       return [
         value.frequency,
-        ...(denominator === undefined ? [] : [{ value: denominator, unit: "participant" }]),
+        ...(denominator === undefined
+          ? []
+          : [{ value: denominator, unit: structuralUnits.participantCount }]),
       ];
     }
     case "study_design_feature":
@@ -278,7 +295,7 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
           );
       }
       const proseNumbers =
-        claim.text.match(/(?<![\p{L}\d])[-−]?\d+(?:[.,]\d+)?(?![\p{L}\d])/gu) ?? [];
+        claim.text.match(/(?<![\p{L}\d\p{Pd}])[-−]?\d+(?:[.,]\d+)?(?![\p{L}\d\p{Pd}])/gu) ?? [];
       const declaredNumbers = claim.quantitativeClaims.map(({ value }) => value);
       for (const proseNumber of proseNumbers)
         if (!declaredNumbers.includes(Number(proseNumber.replace("−", "-").replace(",", "."))))
