@@ -12,6 +12,7 @@ import { contextualNeedId } from "./contextual-authorization";
 import {
   CONTEXTUAL_BIBLIOGRAPHIC_DISCOVERY_REQUEST_VERSION,
   MAX_CONTEXTUAL_DISCOVERY_RESULTS,
+  BibliographicIdentityConflictError,
   contextualBibliographicDiscoveryRequestSchema,
   discoverContextualBibliographicCandidates,
   type ContextualBibliographicDiscoveryRequest,
@@ -238,6 +239,115 @@ test("deduplicates connected records by available identifiers and retains source
   assert.equal(result.candidates[0].identifiers.pmid, "42");
 });
 
+test("consolidation is identical when source and record return orders are reversed", async () => {
+  const pubmedRecords = [
+    article("pubmed", "42", {
+      pmid: "42",
+      doi: "10.5555/shared",
+      abstract: "short",
+    }),
+    article("pubmed", "7", { pmid: "7" }),
+  ];
+  const crossrefRecords = [
+    article("crossref", "10.5555/shared", {
+      doi: "10.5555/shared",
+      abstract: "A deterministic and longer synthetic abstract",
+    }),
+    article("crossref", "10.5555/independent", { doi: "10.5555/independent" }),
+  ];
+  const forward = await discoverContextualBibliographicCandidates(
+    need,
+    request({ sources: ["pubmed", "crossref"] }),
+    adapters({
+      pubmed: new FakeAdapter("pubmed", pubmedRecords),
+      crossref: new FakeAdapter("crossref", crossrefRecords),
+    }),
+  );
+  const reversed = await discoverContextualBibliographicCandidates(
+    need,
+    request({ sources: ["crossref", "pubmed"] }),
+    adapters({
+      pubmed: new FakeAdapter("pubmed", [...pubmedRecords].reverse()),
+      crossref: new FakeAdapter("crossref", [...crossrefRecords].reverse()),
+    }),
+  );
+
+  assert.deepEqual(reversed, forward);
+});
+
+test("rejects identifier-linked records with conflicting DOI, PMID, or PMCID", async () => {
+  const cases: Array<{
+    scheme: "doi" | "pmid" | "pmcid";
+    first: Partial<ScientificArticle>;
+    second: Partial<ScientificArticle>;
+    values: string[];
+  }> = [
+    {
+      scheme: "doi",
+      first: { pmid: "42", doi: "10.1000/first" },
+      second: { pmid: "42", doi: "10.1000/second" },
+      values: ["10.1000/first", "10.1000/second"],
+    },
+    {
+      scheme: "pmid",
+      first: { doi: "10.1000/shared", pmid: "41" },
+      second: { doi: "10.1000/shared", pmid: "42" },
+      values: ["41", "42"],
+    },
+    {
+      scheme: "pmcid",
+      first: { doi: "10.1000/shared", pmcid: "PMC41" },
+      second: { doi: "10.1000/shared", pmcid: "PMC42" },
+      values: ["PMC41", "PMC42"],
+    },
+  ];
+
+  for (const conflict of cases) {
+    await assert.rejects(
+      discoverContextualBibliographicCandidates(
+        need,
+        request({ sources: ["pubmed", "crossref"] }),
+        adapters({
+          pubmed: new FakeAdapter("pubmed", [article("pubmed", "first", conflict.first)]),
+          crossref: new FakeAdapter("crossref", [article("crossref", "second", conflict.second)]),
+        }),
+      ),
+      (error) => {
+        assert.ok(error instanceof BibliographicIdentityConflictError);
+        assert.deepEqual(error.conflicts, [{ scheme: conflict.scheme, values: conflict.values }]);
+        return true;
+      },
+    );
+  }
+});
+
+test("preserves original provenance and records the returning adapter separately", async () => {
+  const returned = article("pubmed", "42", { pmid: "42" });
+  returned.provenance[0] = {
+    source: "crossref",
+    externalId: "original-crossref-record",
+    sourceUrl: "https://example.test/original",
+    discoveredBy: "europe_pmc",
+    isOpenAccess: true,
+    license: "synthetic-license",
+  };
+  const result = await discoverContextualBibliographicCandidates(
+    need,
+    request(),
+    adapters({ pubmed: new FakeAdapter("pubmed", [returned]) }),
+  );
+  const candidate = result.candidates[0];
+
+  assert.deepEqual(candidate.returnedBy, ["pubmed"]);
+  assert.deepEqual(candidate.discoveryProvenance.sourceRecords, returned.provenance);
+  assert.deepEqual(candidate.discoveryProvenance.adapterReturns, [
+    {
+      adapter: "pubmed",
+      identifiers: { doi: null, pmid: "42", pmcid: null },
+    },
+  ]);
+});
+
 test("does not deduplicate distinct articles by title", async () => {
   const sameTitle = "The same synthetic title";
   const result = await discoverContextualBibliographicCandidates(
@@ -313,8 +423,8 @@ test("classifies simulated timeout and rate limiting without making network call
     }),
   );
   assert.deepEqual(result.failures, [
-    { source: "pubmed", kind: "timeout" },
     { source: "europe_pmc", kind: "rate_limited", httpStatus: 429 },
+    { source: "pubmed", kind: "timeout" },
   ]);
 });
 
