@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v5" as const;
 export const EDITORIAL_GENERATION_PROFILE_VERSION = "editorial-generation-profile.v1" as const;
-export const CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION = "contextual-scientific-material.v1" as const;
+export const CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION = "contextual-scientific-material.v2" as const;
 
 /** Canonical units for numeric fact fields whose rct.v1 shape has no explicit `unit` property. */
 export const SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS = {
@@ -194,7 +194,7 @@ export const contextualScientificMaterialSchema = z
           .object({
             id,
             statement: text,
-            epistemicStatus: epistemicStatusSchema,
+            epistemicStatus: epistemicStatusSchema.optional(),
             provenance: z
               .object({
                 sourceDocumentIds: z.array(id).default([]),

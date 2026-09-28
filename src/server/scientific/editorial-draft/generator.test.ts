@@ -74,14 +74,13 @@ test("context never expands quantitative authority or inference boundaries", asy
   const provider = new DeterministicScientificEditorialProvider(pmid42717033ExperimentalDraft);
   const contextualMaterial = [
     {
-      schemaVersion: "contextual-scientific-material.v1" as const,
+      schemaVersion: "contextual-scientific-material.v2" as const,
       id: "context:quantitative-test",
       articleId: pmid42717033SourceSet.articleId,
       claims: [
         {
           id: "context:claim:quantitative-test",
           statement: "External context mentions 999 arbitrary units.",
-          epistemicStatus: "hypothesis" as const,
           provenance: {
             sourceDocumentIds: [],
             evidenceAnchorIds: [],
