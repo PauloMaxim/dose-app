@@ -104,7 +104,7 @@ function validate(
 
 function contextMaterial(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: "contextual-scientific-material.v1",
+    schemaVersion: "contextual-scientific-material.v2",
     id: "context:one",
     articleId: base.articleId,
     claims: [
@@ -151,8 +151,53 @@ test("context preflight accepts the empty canary boundary", () => {
   assert.deepEqual(preflight([], []), { valid: true, errors: [] });
 });
 
+test("descriptive contextual claims may omit epistemic qualification", () => {
+  const context = contextMaterial();
+  const { epistemicStatus: _, ...descriptiveClaim } = context.claims[0];
+  const descriptiveContext = { ...context, claims: [descriptiveClaim] };
+
+  assert.deepEqual(preflight([descriptiveContext]), { valid: true, errors: [] });
+
+  const draft = clone();
+  const claim = scientificClaim(draft);
+  claim.statementKind = "contextual_explanation";
+  claim.grounding = {
+    factIds: [],
+    interpretationClaimIds: [],
+    evidenceAnchorIds: [],
+    sourceDocumentIds: [],
+    contextualClaimIds: ["context:claim:one"],
+  };
+  assert.deepEqual(validate(draft, [descriptiveContext], ["external:one"]), {
+    valid: true,
+    errors: [],
+  });
+});
+
+test("missing contextual epistemic status does not authorize demonstrated causality", () => {
+  const context = contextMaterial();
+  const { epistemicStatus: _, ...descriptiveClaim } = context.claims[0];
+  const descriptiveContext = { ...context, claims: [descriptiveClaim] };
+  const draft = clone();
+  const claim = scientificClaim(draft);
+  claim.statementKind = "contextual_explanation";
+  claim.grounding = {
+    factIds: [],
+    interpretationClaimIds: [],
+    evidenceAnchorIds: [],
+    sourceDocumentIds: [],
+    contextualClaimIds: ["context:claim:one"],
+  };
+  claim.epistemicStatus = "demonstrated_causality";
+
+  const report = validate(draft, [descriptiveContext], ["external:one"]);
+  assert.ok(report.errors.some(({ code }) => code === "CAUSALITY_NOT_SUPPORTED"));
+});
+
 test("context preflight rejects invalid shape and a divergent article", () => {
-  assert.ok(preflight([{ id: "invalid" }]).errors.some(({ code }) => code === "CONTEXT_SCHEMA_INVALID"));
+  assert.ok(
+    preflight([{ id: "invalid" }]).errors.some(({ code }) => code === "CONTEXT_SCHEMA_INVALID"),
+  );
   assert.ok(
     preflight([contextMaterial({ articleId: "pmid:different" })]).errors.some(
       ({ code }) => code === "CONTEXT_ARTICLE_MISMATCH",
@@ -228,7 +273,7 @@ test("rejects nonexistent fact, interpretation, and evidence IDs", () => {
 
 test("rejects contextual material without provenance", () => {
   const context = contextualScientificMaterialSchema.parse({
-    schemaVersion: "contextual-scientific-material.v1",
+    schemaVersion: "contextual-scientific-material.v2",
     id: "context:one",
     articleId: base.articleId,
     claims: [

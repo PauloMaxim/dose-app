@@ -39,17 +39,21 @@ Cada bloco contém afirmações individualizadas, classificadas como:
 - `editorial_transition` — conexão linguística, sem autoridade factual.
 
 Uma afirmação substantiva precisa referenciar ao menos um `factId`, `interpretationClaimId`,
-`evidenceAnchorId`, `sourceDocumentId` ou `externalContextReferenceId`. Transições não podem usar
-grounding para parecer científicas. Todos os IDs são resolvidos contra os inputs autorizados.
+`evidenceAnchorId`, `sourceDocumentId` ou `contextualClaimId`. As referências externas permanecem na
+proveniência do material contextual, não no grounding do draft. Transições não podem usar grounding
+para parecer científicas. Todos os IDs são resolvidos contra os inputs autorizados.
 Valores quantitativos podem ser declarados em `quantitativeClaims`; o validador exige que valor e
 unidade ocorram no fact indicado e que esse fact também esteja no grounding. Essa estrutura permite
 uma checagem pós-geração sem promover o texto a autoridade.
 
 ## Contextual scientific material
 
-`ContextualScientificMaterial.v1` é um input separado. Cada claim contextual tem status epistêmico
-e proveniência própria em documento-fonte, âncora de evidência ou referência externa previamente
-autorizada. Contexto vazio de proveniência é inválido. O composer não pode produzi-lo do nada.
+`ContextualScientificMaterial.v2` é um input separado. Cada claim contextual tem proveniência própria
+e pode declarar status epistêmico quando a natureza da afirmação exigir qualificação. Contexto
+descritivo factual pode omitir o status; a ausência não declara nem autoriza causalidade,
+equivalência, superioridade ou recomendação. A proveniência permanece obrigatória em documento-fonte,
+âncora de evidência ou referência externa previamente autorizada. Contexto vazio de proveniência é
+inválido. O composer não pode produzi-lo do nada.
 
 Esta mudança não cadastra referências externas nem adiciona conhecimento científico. Em particular,
 ela não preenche lacunas mecanísticas de Iptacopan ou Clopidogrel/DAPT. Uma futura aquisição de
@@ -138,7 +142,7 @@ e benefício clínico observado, sem confundi-los.
 No caso Mitiperstat, parte relevante do mecanismo está no próprio abstract e já foi atomizada em
 facts; portanto não deve ser rotulada como conhecimento externo. Explicações além do que esses facts
 e anchors sustentam — por exemplo, história da via, fisiologia adicional, significado clínico externo
-de escalas ou estágio de desenvolvimento — exigiriam `ContextualScientificMaterial.v1` com
+de escalas ou estágio de desenvolvimento — exigiriam `ContextualScientificMaterial.v2` com
 proveniência própria. Nada disso foi acrescentado nesta mudança.
 
 ### E. Conteúdo puramente estilístico
