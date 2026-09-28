@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { ContextualNeed } from "./contextual-need";
+import { contextualNeedSchema, type ContextualNeed } from "./contextual-need";
 import type { createExternalContextAcquisitionRegistry } from "./external-context-acquisition";
 import type { createExternalContextReferenceRegistry } from "./external-context-reference";
 
@@ -10,20 +10,47 @@ export const CONTEXTUAL_AUTHORIZATION_VERSION = "contextual-authorization.v1" as
 const id = z.string().trim().min(1).max(500);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 
-export const contextualClaimCandidateSchema = z
+const contextualClaimCandidateCoreSchema = z
   .object({
     schemaVersion: z.literal(CONTEXTUAL_CLAIM_CANDIDATE_VERSION),
     id,
-    revision: sha256,
     articleId: id,
     contextualNeedId: id,
     editorialPurpose: z.literal("explain_endpoint_measure"),
     externalContextReferenceId: id,
     externalContextAcquisitionId: id,
     externalContextAcquisitionAnchorIds: z.array(id).min(1),
+    acquiredEvidence: z
+      .object({
+        checksum: z.object({ algorithm: z.literal("sha256"), value: sha256 }).strict(),
+        anchors: z
+          .array(
+            z
+              .object({
+                schemaVersion: z.literal("external-context-acquisition-anchor.v1"),
+                id,
+                acquisitionId: id,
+                locator: z
+                  .object({
+                    kind: z.literal("unicode_code_point_range"),
+                    start: z.number().int().nonnegative(),
+                    end: z.number().int().positive(),
+                  })
+                  .strict(),
+                excerpt: z.string().min(1),
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict(),
     statement: z.string().trim().min(1).max(10_000),
   })
   .strict();
+
+export const contextualClaimCandidateSchema = contextualClaimCandidateCoreSchema.extend({
+  revision: sha256,
+});
 
 export type ContextualClaimCandidate = z.infer<typeof contextualClaimCandidateSchema>;
 
@@ -94,7 +121,9 @@ export function contextualNeedId(need: ContextualNeed) {
   return `contextual-need:${need.articleId}:${need.subject.endpointId}:${revision}`;
 }
 
-function candidateRevision(candidate: Omit<ContextualClaimCandidate, "revision">) {
+type ContextualClaimCandidateCore = z.infer<typeof contextualClaimCandidateCoreSchema>;
+
+function candidateRevision(candidate: ContextualClaimCandidateCore) {
   const identity = [
     candidate.schemaVersion,
     candidate.id,
@@ -104,6 +133,17 @@ function candidateRevision(candidate: Omit<ContextualClaimCandidate, "revision">
     candidate.externalContextReferenceId,
     candidate.externalContextAcquisitionId,
     candidate.externalContextAcquisitionAnchorIds,
+    candidate.acquiredEvidence.checksum.algorithm,
+    candidate.acquiredEvidence.checksum.value,
+    candidate.acquiredEvidence.anchors.map((anchor) => [
+      anchor.schemaVersion,
+      anchor.id,
+      anchor.acquisitionId,
+      anchor.locator.kind,
+      anchor.locator.start,
+      anchor.locator.end,
+      anchor.excerpt,
+    ]),
     candidate.statement,
   ];
   return createHash("sha256").update(JSON.stringify(identity), "utf8").digest("hex");
@@ -120,7 +160,8 @@ export function createContextualClaimCandidateRegistry(
   inputs: readonly ContextualClaimCandidateInput[],
 ) {
   const needs = new Map<string, ContextualNeed>();
-  for (const need of contextualNeeds) {
+  for (const inputNeed of contextualNeeds) {
+    const need = contextualNeedSchema.parse(inputNeed);
     const needId = contextualNeedId(need);
     if (needs.has(needId)) throw new Error(`Duplicate contextual need ID: ${needId}`);
     needs.set(needId, structuredClone(need));
@@ -139,22 +180,27 @@ export function createContextualClaimCandidateRegistry(
     const acquisition = acquisitionRegistry.resolve(input.externalContextAcquisitionId);
     if (acquisition.externalContextReferenceId !== reference.id)
       throw new Error("External context acquisition does not match the supplied reference");
-    for (const anchorId of input.externalContextAcquisitionAnchorIds) {
+    const usedAnchors = input.externalContextAcquisitionAnchorIds.map((anchorId) => {
       const anchor = acquisitionRegistry.resolveAnchor(anchorId);
       if (anchor.acquisitionId !== acquisition.id)
         throw new Error(
           `External context acquisition anchor does not belong to acquisition: ${anchorId}`,
         );
-    }
-    const withoutRevision = {
+      return anchor;
+    });
+    const core = contextualClaimCandidateCoreSchema.parse({
       schemaVersion: CONTEXTUAL_CLAIM_CANDIDATE_VERSION,
       ...input,
       externalContextAcquisitionAnchorIds: [...input.externalContextAcquisitionAnchorIds],
       editorialPurpose: need.editorialPurpose,
-    };
+      acquiredEvidence: {
+        checksum: acquisition.checksum,
+        anchors: usedAnchors,
+      },
+    });
     const candidate = contextualClaimCandidateSchema.parse({
-      ...withoutRevision,
-      revision: candidateRevision(withoutRevision),
+      ...core,
+      revision: candidateRevision(core),
     });
     candidates.set(candidate.id, candidate);
   }

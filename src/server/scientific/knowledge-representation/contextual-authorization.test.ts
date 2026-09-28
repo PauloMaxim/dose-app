@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import type { ContextualNeed } from "./contextual-need";
+import { contextualNeedSchema, type ContextualNeed } from "./contextual-need";
 import {
   checksumContent,
   createExternalContextAcquisitionRegistry,
@@ -82,12 +82,14 @@ const otherAcquisitionInput: ExternalContextAcquisitionInput = {
   ],
 };
 
-function boundaries() {
-  const references = createExternalContextReferenceRegistry([reference, otherReference]);
-  const acquisitions = createExternalContextAcquisitionRegistry(references, [
+function boundaries(
+  acquisitionInputs: readonly ExternalContextAcquisitionInput[] = [
     acquisitionInput,
     otherAcquisitionInput,
-  ]);
+  ],
+) {
+  const references = createExternalContextReferenceRegistry([reference, otherReference]);
+  const acquisitions = createExternalContextAcquisitionRegistry(references, acquisitionInputs);
   return { references, acquisitions };
 }
 
@@ -107,8 +109,9 @@ function candidateInput(overrides: Record<string, unknown> = {}) {
 function candidateRegistry(
   inputs = [candidateInput()],
   contextualNeeds: readonly ContextualNeed[] = [need],
+  acquisitionInputs?: readonly ExternalContextAcquisitionInput[],
 ) {
-  const { references, acquisitions } = boundaries();
+  const { references, acquisitions } = boundaries(acquisitionInputs);
   return createContextualClaimCandidateRegistry(
     contextualNeeds,
     references,
@@ -123,10 +126,10 @@ test("contextual need identity is stable and covers its complete semantic conten
     ...structuredClone(need),
     contextualQuestion: "Which domain does Measure assess?",
   };
-  const differentPurpose = {
+  const differentName = {
     ...structuredClone(need),
-    editorialPurpose: "describe_endpoint_measure",
-  } as unknown as ContextualNeed;
+    subject: { ...need.subject, name: "Different endpoint name" },
+  };
   const differentEvidence = {
     ...structuredClone(need),
     evidenceAnchorIds: ["evidence:2"],
@@ -141,8 +144,29 @@ test("contextual need identity is stable and covers its complete semantic conten
     contextualNeedId(need),
     /^contextual-need:article:synthetic-001:endpoint-1:[a-f0-9]{64}$/,
   );
-  for (const changed of [differentQuestion, differentPurpose, differentEvidence, differentFacts])
+  for (const changed of [differentQuestion, differentName, differentEvidence, differentFacts])
     assert.notEqual(contextualNeedId(need), contextualNeedId(changed));
+});
+
+test("the registry validates and canonicalizes contextual needs before deriving identity", () => {
+  const paddedNeed = {
+    ...structuredClone(need),
+    contextualQuestion: `  ${need.contextualQuestion}  `,
+  } as ContextualNeed;
+  const canonicalNeed = contextualNeedSchema.parse(paddedNeed);
+  assert.equal(contextualNeedId(canonicalNeed), contextualNeedId(need));
+  assert.doesNotThrow(() =>
+    candidateRegistry(
+      [candidateInput({ contextualNeedId: contextualNeedId(canonicalNeed) })],
+      [paddedNeed],
+    ),
+  );
+
+  const invalidNeed = {
+    ...structuredClone(need),
+    status: "authorized",
+  } as unknown as ContextualNeed;
+  assert.throws(() => candidateRegistry([], [invalidNeed]));
 });
 
 test("the registry rejects only truly identical contextual needs as duplicates", () => {
@@ -200,6 +224,65 @@ test("a candidate has complete, anchored lineage and a deterministic exact-claim
   assert.deepEqual(first, second);
   assert.match(first.revision, /^[a-f0-9]{64}$/);
   assert.deepEqual(first.externalContextAcquisitionAnchorIds, [acquisitionInput.anchors[0].id]);
+});
+
+test("candidate revision uses the canonical stored statement and remains authorizable", () => {
+  const padded = candidateRegistry([candidateInput({ statement: "  Canonical statement.  " })]);
+  const candidate = padded.resolve(candidateInput().id);
+  const canonical = candidateRegistry([
+    candidateInput({ statement: "Canonical statement." }),
+  ]).resolve(candidate.id);
+  assert.equal(candidate.statement, "Canonical statement.");
+  assert.equal(candidate.revision, canonical.revision);
+
+  const authorization = createContextualAuthorizationRegistry(padded, [
+    {
+      id: "contextual-authorization:canonical-statement:v1",
+      claimCandidateId: candidate.id,
+      decision: "authorized",
+      reviewer: { id: "reviewer:human-1" },
+      reviewedAt: "2026-09-28T13:00:00Z",
+    },
+  ]);
+  assert.deepEqual(authorization.authorizedClaims([candidate]), [candidate]);
+  assert.deepEqual(
+    authorization.authorizedClaims([{ ...candidate, statement: "Tampered statement." }]),
+    [],
+  );
+});
+
+test("authorization does not survive changed acquired evidence that reuses every ID", () => {
+  const originalRegistry = candidateRegistry();
+  const original = originalRegistry.resolve(candidateInput().id);
+  const authorization = createContextualAuthorizationRegistry(originalRegistry, [
+    {
+      id: "contextual-authorization:acquired-evidence:v1",
+      claimCandidateId: original.id,
+      decision: "authorized",
+      reviewer: { id: "reviewer:human-1" },
+      reviewedAt: "2026-09-28T13:00:00Z",
+    },
+  ]);
+  const changedContent = `B${content.slice(1)}`;
+  const changedAcquisition = {
+    ...acquisitionInput,
+    content: { ...acquisitionInput.content, value: changedContent },
+  };
+  const changed = candidateRegistry(
+    [candidateInput()],
+    [need],
+    [changedAcquisition, otherAcquisitionInput],
+  ).resolve(original.id);
+
+  assert.equal(changed.id, original.id);
+  assert.equal(changed.statement, original.statement);
+  assert.notEqual(
+    changed.acquiredEvidence.checksum.value,
+    original.acquiredEvidence.checksum.value,
+  );
+  assert.notDeepEqual(changed.acquiredEvidence.anchors, original.acquiredEvidence.anchors);
+  assert.notEqual(changed.revision, original.revision);
+  assert.deepEqual(authorization.authorizedClaims([changed]), []);
 });
 
 test("unknown contextual need, reference, acquisition, and anchor IDs fail explicitly", () => {
