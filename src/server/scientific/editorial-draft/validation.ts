@@ -5,14 +5,19 @@ import type {
   ScientificSourceSet,
 } from "../knowledge-representation/editorial-pipeline";
 import {
+  contextualScientificMaterialSchema,
   scientificEditorialDraftSchema,
-  type ContextualScientificMaterial,
   type EditorialGenerationProfile,
   type ScientificEditorialDraft,
 } from "./contracts";
 import { deriveEditorialScientificAuthority } from "./scientific-authority";
 
 export type EditorialDraftValidationCode =
+  | "CONTEXT_SCHEMA_INVALID"
+  | "CONTEXT_ARTICLE_MISMATCH"
+  | "CONTEXT_MATERIAL_ID_DUPLICATE"
+  | "CONTEXT_CLAIM_ID_DUPLICATE"
+  | "CONTEXT_CLAIM_NOT_FOUND"
   | "DRAFT_SCHEMA_INVALID"
   | "DRAFT_LINEAGE_MISMATCH"
   | "DRAFT_ARTICLE_MISMATCH"
@@ -47,9 +52,18 @@ export interface ValidateScientificEditorialDraftInput {
   evidenceSet: ScientificEvidenceSet;
   factSet: RCTScientificFactSet;
   interpretationArtifact: ScientificInterpretationArtifact;
-  contextualMaterial?: ContextualScientificMaterial[];
+  contextualMaterial?: unknown[];
   editorialProfile: EditorialGenerationProfile;
   /** IDs are supplied only by a future, separately authorized context acquisition boundary. */
+  authorizedExternalContextReferenceIds?: string[];
+}
+
+export interface ValidateContextualScientificMaterialInput {
+  sourceSet: ScientificSourceSet;
+  evidenceSet: ScientificEvidenceSet;
+  factSet: RCTScientificFactSet;
+  interpretationArtifact: ScientificInterpretationArtifact;
+  contextualMaterial?: unknown[];
   authorizedExternalContextReferenceIds?: string[];
 }
 
@@ -64,9 +78,87 @@ function hasGrounding(grounding: {
   interpretationClaimIds: string[];
   evidenceAnchorIds: string[];
   sourceDocumentIds: string[];
-  externalContextReferenceIds: string[];
+  contextualClaimIds: string[];
 }) {
   return Object.values(grounding).some((values) => values.length > 0);
+}
+
+/** Validates all context at the acquisition boundary, before any provider can observe it. */
+export function validateContextualScientificMaterialInput(
+  input: ValidateContextualScientificMaterialInput,
+): { valid: boolean; errors: EditorialDraftValidationIssue[] } {
+  const errors: EditorialDraftValidationIssue[] = [];
+  const add = (code: EditorialDraftValidationCode, path: string, message: string) =>
+    errors.push({ code, path, message });
+  const sources = new Set(input.sourceSet.sourceDocuments.map(({ id }) => id));
+  const anchors = new Set(input.evidenceSet.anchors.map(({ id }) => id));
+  const authorizedReferences = new Set(input.authorizedExternalContextReferenceIds ?? []);
+  const materialIds = new Set<string>();
+  const claimIds = new Set<string>();
+
+  for (const [materialIndex, candidate] of (input.contextualMaterial ?? []).entries()) {
+    const parsed = contextualScientificMaterialSchema.safeParse(candidate);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues)
+        add(
+          "CONTEXT_SCHEMA_INVALID",
+          `contextualMaterial.${materialIndex}.${issue.path.join(".")}`,
+          issue.message,
+        );
+      continue;
+    }
+    const material = parsed.data;
+    const materialPath = `contextualMaterial.${materialIndex}`;
+    if (
+      material.articleId !== input.sourceSet.articleId ||
+      material.articleId !== input.evidenceSet.articleId ||
+      material.articleId !== input.factSet.articleId ||
+      material.articleId !== input.interpretationArtifact.articleId
+    )
+      add(
+        "CONTEXT_ARTICLE_MISMATCH",
+        `${materialPath}.articleId`,
+        "Contextual material and scientific inputs must describe one article.",
+      );
+    if (materialIds.has(material.id))
+      add(
+        "CONTEXT_MATERIAL_ID_DUPLICATE",
+        `${materialPath}.id`,
+        `Duplicate contextual material ID: ${material.id}`,
+      );
+    materialIds.add(material.id);
+    for (const [claimIndex, claim] of material.claims.entries()) {
+      const claimPath = `${materialPath}.claims.${claimIndex}`;
+      if (claimIds.has(claim.id))
+        add(
+          "CONTEXT_CLAIM_ID_DUPLICATE",
+          `${claimPath}.id`,
+          `Duplicate contextual claim ID: ${claim.id}`,
+        );
+      claimIds.add(claim.id);
+      const provenancePath = `${claimPath}.provenance`;
+      if (!Object.values(claim.provenance).some((values) => values.length))
+        add(
+          "CONTEXT_PROVENANCE_REQUIRED",
+          provenancePath,
+          "Contextual scientific material requires independent provenance.",
+        );
+      for (const sourceId of claim.provenance.sourceDocumentIds)
+        if (!sources.has(sourceId))
+          add("SOURCE_DOCUMENT_NOT_FOUND", provenancePath, `Unknown source document: ${sourceId}`);
+      for (const anchorId of claim.provenance.evidenceAnchorIds)
+        if (!anchors.has(anchorId))
+          add("EVIDENCE_ANCHOR_NOT_FOUND", provenancePath, `Unknown evidence anchor: ${anchorId}`);
+      for (const referenceId of claim.provenance.externalContextReferenceIds)
+        if (!authorizedReferences.has(referenceId))
+          add(
+            "EXTERNAL_CONTEXT_REFERENCE_NOT_FOUND",
+            provenancePath,
+            `Unauthorized context reference: ${referenceId}`,
+          );
+    }
+  }
+  return { valid: errors.length === 0, errors };
 }
 
 /**
@@ -89,16 +181,20 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
     };
 
   const draft = parsed.data;
-  const errors: EditorialDraftValidationIssue[] = [];
+  const contextReport = validateContextualScientificMaterialInput(input);
+  const errors: EditorialDraftValidationIssue[] = [...contextReport.errors];
   const add = (code: EditorialDraftValidationCode, path: string, message: string) =>
     errors.push({ code, path, message });
   const factIds = new Set(input.factSet.facts.map(({ id }) => id));
   const interpretationIds = new Set(input.interpretationArtifact.claims.map(({ id }) => id));
   const anchors = new Map(input.evidenceSet.anchors.map((anchor) => [anchor.id, anchor]));
   const sources = new Set(input.sourceSet.sourceDocuments.map(({ id }) => id));
-  const externalIds = new Set(input.authorizedExternalContextReferenceIds ?? []);
+  const validatedContextualMaterial = (input.contextualMaterial ?? []).flatMap((material) => {
+    const candidate = contextualScientificMaterialSchema.safeParse(material);
+    return candidate.success ? [candidate.data] : [];
+  });
   const contextClaims = new Map(
-    (input.contextualMaterial ?? []).flatMap((material) =>
+    validatedContextualMaterial.flatMap((material) =>
       material.claims.map((claim) => [claim.id, claim] as const),
     ),
   );
@@ -131,31 +227,6 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
       "inputLineage",
       "Draft lineage must identify the supplied artifacts.",
     );
-
-  for (const material of input.contextualMaterial ?? []) {
-    for (const [index, claim] of material.claims.entries()) {
-      const path = `contextualMaterial.${material.id}.claims.${index}.provenance`;
-      if (!Object.values(claim.provenance).some((values) => values.length))
-        add(
-          "CONTEXT_PROVENANCE_REQUIRED",
-          path,
-          "Contextual scientific material requires independent provenance.",
-        );
-      for (const sourceId of claim.provenance.sourceDocumentIds)
-        if (!sources.has(sourceId))
-          add("SOURCE_DOCUMENT_NOT_FOUND", path, `Unknown source document: ${sourceId}`);
-      for (const anchorId of claim.provenance.evidenceAnchorIds)
-        if (!anchors.has(anchorId))
-          add("EVIDENCE_ANCHOR_NOT_FOUND", path, `Unknown evidence anchor: ${anchorId}`);
-      for (const referenceId of claim.provenance.externalContextReferenceIds)
-        if (!externalIds.has(referenceId))
-          add(
-            "EXTERNAL_CONTEXT_REFERENCE_NOT_FOUND",
-            path,
-            `Unauthorized context reference: ${referenceId}`,
-          );
-    }
-  }
 
   const authoritativeBoundaries = new Set(
     scientificAuthority.inferenceBoundaries.map(({ id }) => id),
@@ -233,13 +304,31 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
             `${path}.grounding.sourceDocumentIds`,
             `Unknown source: ${sourceId}`,
           );
-      for (const referenceId of claim.grounding.externalContextReferenceIds)
-        if (!externalIds.has(referenceId) && !contextClaims.has(referenceId))
+      for (const contextClaimId of claim.grounding.contextualClaimIds)
+        if (!contextClaims.has(contextClaimId))
           add(
-            "EXTERNAL_CONTEXT_REFERENCE_NOT_FOUND",
-            `${path}.grounding.externalContextReferenceIds`,
-            `Unknown context reference: ${referenceId}`,
+            "CONTEXT_CLAIM_NOT_FOUND",
+            `${path}.grounding.contextualClaimIds`,
+            `Unknown contextual claim: ${contextClaimId}`,
           );
+      const usesContext = claim.grounding.contextualClaimIds.length > 0;
+      const usesArticleAuthority =
+        claim.grounding.factIds.length > 0 ||
+        claim.grounding.interpretationClaimIds.length > 0 ||
+        claim.grounding.evidenceAnchorIds.length > 0 ||
+        claim.grounding.sourceDocumentIds.length > 0;
+      if (usesContext && claim.statementKind !== "contextual_explanation")
+        add(
+          "GROUNDING_KIND_INCOMPATIBLE",
+          `${path}.grounding.contextualClaimIds`,
+          "Only contextual explanations may cite contextual claims.",
+        );
+      if (claim.statementKind === "article_supported_fact" && !usesArticleAuthority)
+        add(
+          "GROUNDING_KIND_INCOMPATIBLE",
+          `${path}.grounding`,
+          "Article-supported facts require authoritative article grounding.",
+        );
       if (
         claim.sourceRequirement === "authorized_full_text" &&
         !input.sourceSet.coverage.hasAuthorizedFullText
@@ -268,15 +357,11 @@ export function validateScientificEditorialDraft(input: ValidateScientificEditor
           "Editorial Draft v1 cannot authorize treatment recommendations.",
         );
       if (claim.epistemicStatus === "demonstrated_causality") {
-        const groundedContext = claim.grounding.externalContextReferenceIds
-          .map((id) => contextClaims.get(id))
-          .some((context) => context?.epistemicStatus === "demonstrated_causality");
-        if (!groundedContext)
-          add(
-            "CAUSALITY_NOT_SUPPORTED",
-            `${path}.epistemicStatus`,
-            "Mechanistic plausibility cannot be promoted to demonstrated causality.",
-          );
+        add(
+          "CAUSALITY_NOT_SUPPORTED",
+          `${path}.epistemicStatus`,
+          "Mechanistic plausibility cannot be promoted to demonstrated causality.",
+        );
       }
       if (block.kind === "source_boundary" && claim.epistemicStatus !== "source_coverage")
         add(

@@ -5,8 +5,8 @@ import type {
   ScientificSourceSet,
 } from "../knowledge-representation/editorial-pipeline";
 import {
+  contextualScientificMaterialSchema,
   scientificEditorialDraftSchema,
-  type ContextualScientificMaterial,
   type EditorialGenerationProfile,
   type ScientificEditorialDraft,
 } from "./contracts";
@@ -16,7 +16,11 @@ import {
   SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
 } from "./prompt";
 import { deriveEditorialScientificAuthority } from "./scientific-authority";
-import { validateScientificEditorialDraft, type EditorialDraftValidationIssue } from "./validation";
+import {
+  validateContextualScientificMaterialInput,
+  validateScientificEditorialDraft,
+  type EditorialDraftValidationIssue,
+} from "./validation";
 
 /** Boundary only: implementations must not treat generated prose as scientific authority. */
 export interface GenerateEditorialDraftInput {
@@ -24,7 +28,9 @@ export interface GenerateEditorialDraftInput {
   evidenceSet: ScientificEvidenceSet;
   factSet: RCTScientificFactSet;
   interpretationArtifact: ScientificInterpretationArtifact;
-  contextualMaterial: ContextualScientificMaterial[];
+  contextualMaterial: unknown[];
+  /** Explicit acquisition-boundary allowlist; it does not make references draft grounding. */
+  authorizedExternalContextReferenceIds: string[];
   editorialProfile: EditorialGenerationProfile;
 }
 
@@ -52,20 +58,28 @@ export class ValidatedScientificEditorialDraftGenerator {
   constructor(private readonly provider: ScientificEditorialProvider) {}
 
   async generate(input: GenerateEditorialDraftInput): Promise<EditorialGenerationResult> {
+    const contextReport = validateContextualScientificMaterialInput(input);
+    if (!contextReport.valid) return { ok: false, errors: contextReport.errors };
+    const validatedInput = {
+      ...input,
+      contextualMaterial: input.contextualMaterial.map((material) =>
+        contextualScientificMaterialSchema.parse(material),
+      ),
+    };
     const scientificAuthority = deriveEditorialScientificAuthority(
-      input.factSet,
-      input.interpretationArtifact,
+      validatedInput.factSet,
+      validatedInput.interpretationArtifact,
     );
     const output = await this.provider.generate({
       promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
       systemPrompt: buildScientificEditorialSystemPrompt(input.editorialProfile),
-      input,
+      input: validatedInput,
       scientificAuthority,
     });
     const parsed = scientificEditorialDraftSchema.safeParse(output);
     const report = validateScientificEditorialDraft({
       draft: output,
-      ...input,
+      ...validatedInput,
     });
     if (!report.valid)
       return {

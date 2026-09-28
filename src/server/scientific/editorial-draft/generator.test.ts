@@ -22,6 +22,7 @@ const input = {
   factSet: pmid42717033FactSet,
   interpretationArtifact: pmid42717033Interpretation,
   contextualMaterial: [],
+  authorizedExternalContextReferenceIds: [],
   editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
 };
 
@@ -55,6 +56,55 @@ test("the deterministic provider exercises structured generation without network
       result.draft.blocks.every((block) => block.claims.every((claim) => claim.statementKind)),
     );
   }
+});
+
+test("invalid contextual material is rejected before provider invocation", async () => {
+  const provider = new DeterministicScientificEditorialProvider(pmid42717033ExperimentalDraft);
+  const result = await new ValidatedScientificEditorialDraftGenerator(provider).generate({
+    ...input,
+    contextualMaterial: [{ schemaVersion: "invalid" }],
+  });
+  assert.equal(result.ok, false);
+  assert.deepEqual(provider.calls, []);
+  if (!result.ok)
+    assert.ok(result.errors.some(({ code }) => code === "CONTEXT_SCHEMA_INVALID"));
+});
+
+test("context never expands quantitative authority or inference boundaries", async () => {
+  const provider = new DeterministicScientificEditorialProvider(pmid42717033ExperimentalDraft);
+  const contextualMaterial = [
+    {
+      schemaVersion: "contextual-scientific-material.v1" as const,
+      id: "context:quantitative-test",
+      articleId: pmid42717033SourceSet.articleId,
+      claims: [
+        {
+          id: "context:claim:quantitative-test",
+          statement: "External context mentions 999 arbitrary units.",
+          epistemicStatus: "hypothesis" as const,
+          provenance: {
+            sourceDocumentIds: [],
+            evidenceAnchorIds: [],
+            externalContextReferenceIds: ["external:test"],
+          },
+        },
+      ],
+    },
+  ];
+  await new ValidatedScientificEditorialDraftGenerator(provider).generate({
+    ...input,
+    contextualMaterial,
+    authorizedExternalContextReferenceIds: ["external:test"],
+  });
+  assert.equal(provider.requests.length, 1);
+  assert.deepEqual(
+    provider.requests[0].scientificAuthority,
+    deriveEditorialScientificAuthority(pmid42717033FactSet, pmid42717033Interpretation),
+  );
+  assert.equal(
+    provider.requests[0].scientificAuthority.quantitativeClaims.some(({ value }) => value === 999),
+    false,
+  );
 });
 
 test("structurally valid free prose remains pending and cannot become an approved document", async () => {
@@ -135,6 +185,7 @@ test("the generic prompt contains no canary-specific scientific content", () => 
 
 test("the generation prompt declares every canonical unit synthesized by validation", () => {
   assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v6");
+  assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /ScientificEditorialDraft\.v5/);
   for (const unit of Object.values(SCIENTIFIC_EDITORIAL_STRUCTURAL_QUANTITATIVE_UNITS))
     assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, new RegExp(`"${unit}"`));
   assert.match(SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT, /sample sizes, event counts, and denominators/);
