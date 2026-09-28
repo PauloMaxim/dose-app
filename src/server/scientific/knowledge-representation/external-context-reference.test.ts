@@ -60,6 +60,24 @@ test("invalid or acquisition-shaped metadata is rejected", () => {
     assert.equal(externalContextReferenceSchema.safeParse(candidate).success, false);
 });
 
+test("partial dates remain valid while complete dates must exist in the calendar", () => {
+  for (const publicationDate of ["2026", "2026-02", "2024-02-29"])
+    assert.equal(
+      externalContextReferenceSchema.safeParse({ ...bibliographicReference, publicationDate })
+        .success,
+      true,
+      publicationDate,
+    );
+
+  for (const publicationDate of ["2026-02-29", "2026-02-31", "2026-04-31"])
+    assert.equal(
+      externalContextReferenceSchema.safeParse({ ...bibliographicReference, publicationDate })
+        .success,
+      false,
+      publicationDate,
+    );
+});
+
 test("acquisition-dependent fields may remain absent without synthetic values", () => {
   const parsed = externalContextReferenceSchema.parse(bibliographicReference);
   for (const field of [

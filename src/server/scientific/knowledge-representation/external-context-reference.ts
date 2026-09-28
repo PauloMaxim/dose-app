@@ -9,7 +9,16 @@ const referenceId = z
   .min(1)
   .max(300)
   .regex(/^[a-z0-9][a-z0-9._-]*(?::[a-z0-9][a-z0-9._-]*)+$/);
-const date = z.string().regex(/^\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?$/);
+const date = z
+  .string()
+  .regex(/^\d{4}(?:-(?:0[1-9]|1[0-2])(?:-(?:0[1-9]|[12]\d|3[01]))?)?$/)
+  .refine((value) => {
+    const [year, month, day] = value.split("-").map(Number);
+    if (day === undefined) return true;
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return day <= daysInMonth[month - 1];
+  }, "Date must be a real calendar date");
 const canonicalLocator = z.url().refine((value) => {
   const protocol = new URL(value).protocol;
   return protocol === "https:" || protocol === "http:";
