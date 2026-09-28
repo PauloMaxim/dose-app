@@ -159,7 +159,7 @@ test("access and licensing observations remain unknown rather than being invente
   assert.equal("fullTextAcquisitionBasis" in result.accessAndLicensing, false);
 });
 
-test("checksum uses only deterministic normalized acquired content", () => {
+test("registry canonicalizes manual input and snapshot validation rejects noncanonical content", () => {
   const decomposed = "Cafe\u0301\r\nSynthetic content";
   const normalized = "Café\nSynthetic content";
   assert.equal(normalizeAcquiredContent(decomposed), normalized);
@@ -174,6 +174,46 @@ test("checksum uses only deterministic normalized acquired content", () => {
   ]).resolve("offline-acquisition:abstract-001");
   assert.equal(first.checksum.value, second.checksum.value);
   assert.equal(first.checksum.value, checksumContent(first.content.value));
+  assert.equal(first.content.value, normalized);
+
+  for (const noncanonical of [decomposed, "Synthetic\r\ncontent", "Synthetic\rcontent"]) {
+    assert.equal(
+      externalContextAcquisitionSchema.safeParse({
+        ...first,
+        content: { ...first.content, value: noncanonical },
+        checksum: { algorithm: "sha256", value: checksumContent(noncanonical) },
+      }).success,
+      false,
+      JSON.stringify(noncanonical),
+    );
+  }
+});
+
+test("application/json requires valid JSON without affecting text/plain", () => {
+  const validJson = createExternalContextAcquisitionRegistry(references, [
+    acquisition({
+      contentScope: "metadata",
+      content: { mediaType: "application/json", value: '{ "synthetic": true }' },
+      anchors: [],
+    }),
+  ]).resolve("offline-acquisition:abstract-001");
+  assert.equal(validJson.content.value, '{ "synthetic": true }');
+
+  assert.throws(
+    () =>
+      createExternalContextAcquisitionRegistry(references, [
+        acquisition({
+          content: { mediaType: "application/json", value: "{invalid" },
+          anchors: [],
+        }),
+      ]),
+    /valid JSON/,
+  );
+
+  const plainText = createExternalContextAcquisitionRegistry(references, [
+    acquisition({ content: { mediaType: "text/plain", value: "{invalid" }, anchors: [] }),
+  ]).resolve("offline-acquisition:abstract-001");
+  assert.equal(plainText.content.value, "{invalid");
 });
 
 test("snapshot validation fails closed for broken checksum and anchor provenance", () => {
@@ -277,6 +317,30 @@ test("full text fails closed without declared license and explicit acquisition b
     }),
   ]).resolve("offline-acquisition:abstract-001");
   assert.equal(result.contentScope, "full_text");
+});
+
+test("full-text acquisition basis is rejected for every non-full-text scope", () => {
+  for (const contentScope of ["metadata", "abstract", "excerpt", "page_or_section"] as const)
+    assert.throws(
+      () =>
+        createExternalContextAcquisitionRegistry(references, [
+          acquisition({
+            contentScope,
+            anchors: [],
+            accessAndLicensing: {
+              accessStatus: "restricted",
+              license: { status: "unknown" },
+              fullTextAcquisitionBasis: {
+                status: "explicitly_declared",
+                statement: "Synthetic basis must remain exclusive to full text.",
+                evidenceLocator: "https://example.invalid/licenses/synthetic#full-text",
+              },
+            },
+          }),
+        ]),
+      /only valid for full-text content/,
+      contentScope,
+    );
 });
 
 test("ACQUISITION DOES NOT EQUAL AUTHORIZATION or scientific material", () => {

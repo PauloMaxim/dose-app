@@ -88,6 +88,25 @@ export const externalContextAcquisitionSchema = z
   })
   .strict()
   .superRefine((acquisition, context) => {
+    if (acquisition.content.value !== normalizeAcquiredContent(acquisition.content.value))
+      context.addIssue({
+        code: "custom",
+        path: ["content", "value"],
+        message: "acquired content must use its canonical normalized representation",
+      });
+
+    if (acquisition.content.mediaType === "application/json") {
+      try {
+        JSON.parse(acquisition.content.value);
+      } catch {
+        context.addIssue({
+          code: "custom",
+          path: ["content", "value"],
+          message: "application/json acquired content must be valid JSON",
+        });
+      }
+    }
+
     if (
       acquisition.contentScope === "full_text" &&
       (acquisition.accessAndLicensing.license.status !== "declared" ||
@@ -97,6 +116,16 @@ export const externalContextAcquisitionSchema = z
         code: "custom",
         path: ["accessAndLicensing"],
         message: "full text requires a declared license and explicit acquisition basis",
+      });
+
+    if (
+      acquisition.contentScope !== "full_text" &&
+      acquisition.accessAndLicensing.fullTextAcquisitionBasis
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["accessAndLicensing", "fullTextAcquisitionBasis"],
+        message: "full-text acquisition basis is only valid for full-text content",
       });
 
     const expectedChecksum = checksumContent(acquisition.content.value);
