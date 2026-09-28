@@ -21,6 +21,10 @@ import type { EditorialDraftValidationIssue } from "./validation";
 import type { ScientificEditorialDraft } from "./contracts";
 import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import {
+  pmid42717033AuthorizedExternalContextReferenceIds,
+  pmid42717033ContextualMaterial,
+} from "./pmid-42717033-context.fixture";
+import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
   pmid42717033Interpretation,
@@ -72,14 +76,14 @@ export interface RealEditorialGenerationDependencies {
   ) => GenerateEditorialDraftInput;
 }
 
-function canaryInput(): GenerateEditorialDraftInput {
+export function createPmid42717033InterventionInput(): GenerateEditorialDraftInput {
   return {
     sourceSet: pmid42717033SourceSet,
     evidenceSet: pmid42717033EvidenceSet,
     factSet: pmid42717033FactSet,
     interpretationArtifact: pmid42717033Interpretation,
-    contextualMaterial: [],
-    authorizedExternalContextReferenceIds: [],
+    contextualMaterial: [...pmid42717033ContextualMaterial],
+    authorizedExternalContextReferenceIds: [...pmid42717033AuthorizedExternalContextReferenceIds],
     editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
   };
 }
@@ -145,7 +149,9 @@ export async function runRealEditorialGeneration(
     },
   );
   try {
-    const input = (dependencies.loadInput ?? canaryInput)(SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID);
+    const input = (dependencies.loadInput ?? createPmid42717033InterventionInput)(
+      SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID,
+    );
     const result = await new ValidatedScientificEditorialDraftGenerator(provider).generate(input);
     const durationMs = Math.max(0, now() - started);
     if (!result.ok)

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { editorialClaimSchema, scientificEditorialDraftJsonSchema } from "./contracts";
+import {
+  CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION,
+  SCIENTIFIC_EDITORIAL_DRAFT_VERSION,
+  contextualScientificMaterialSchema,
+  editorialClaimSchema,
+  scientificEditorialDraftJsonSchema,
+} from "./contracts";
 import {
   DEFAULT_SCIENTIFIC_EDITORIAL_MAX_OUTPUT_TOKENS,
   DEFAULT_SCIENTIFIC_EDITORIAL_MODEL,
@@ -15,12 +21,22 @@ import {
   type OpenAIEditorialTransport,
 } from "./openai.server";
 import {
+  createPmid42717033InterventionInput,
   runRealEditorialGeneration,
   SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID,
 } from "./real-generation.server";
+import {
+  PMID_42717033_CONTEXT_REFERENCE_IDS,
+  pmid42717033AuthorizedExternalContextReferenceIds,
+  pmid42717033ContextualMaterial,
+} from "./pmid-42717033-context.fixture";
 import { SCIENTIFIC_EDITORIAL_PROMPT_VERSION, SCIENTIFIC_EDITORIAL_SYSTEM_PROMPT } from "./prompt";
 import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import { deriveEditorialScientificAuthority } from "./scientific-authority";
+import {
+  validateContextualScientificMaterialInput,
+  validateScientificEditorialDraft,
+} from "./validation";
 import {
   pmid42717033EvidenceSet,
   pmid42717033FactSet,
@@ -53,6 +69,116 @@ const config = {
   maxInputCharacters: 120_000,
   maxOutputTokens: 25_000,
 };
+
+test("the canary intervention contains exactly the two authorized descriptive contexts", () => {
+  const intervention = createPmid42717033InterventionInput();
+  assert.equal(pmid42717033ContextualMaterial.length, 2);
+  assert.deepEqual(intervention.contextualMaterial, pmid42717033ContextualMaterial);
+  assert.deepEqual(
+    intervention.authorizedExternalContextReferenceIds,
+    PMID_42717033_CONTEXT_REFERENCE_IDS,
+  );
+  assert.deepEqual(
+    pmid42717033AuthorizedExternalContextReferenceIds,
+    PMID_42717033_CONTEXT_REFERENCE_IDS,
+  );
+
+  const expected = [
+    {
+      materialId: "context:pmid:42717033:kccq-tss:v1",
+      claimId: "context:pmid:42717033:kccq-tss-description",
+      referenceId: "fda:ddtcoa-000084:qualification:2020-04-09",
+    },
+    {
+      materialId: "context:pmid:42717033:six-minute-walk:v1",
+      claimId: "context:pmid:42717033:six-minute-walk-description",
+      referenceId: "pubmed:3978515",
+    },
+  ];
+  pmid42717033ContextualMaterial.forEach((material, index) => {
+    assert.equal(contextualScientificMaterialSchema.safeParse(material).success, true);
+    assert.equal(material.schemaVersion, CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION);
+    assert.equal(material.articleId, SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID);
+    assert.equal(material.id, expected[index].materialId);
+    assert.equal(material.claims.length, 1);
+    const claim = material.claims[0];
+    assert.equal(claim.id, expected[index].claimId);
+    assert.equal("epistemicStatus" in claim, false);
+    assert.deepEqual(claim.provenance, {
+      sourceDocumentIds: [],
+      evidenceAnchorIds: [],
+      externalContextReferenceIds: [expected[index].referenceId],
+    });
+  });
+});
+
+test("the canary contextual preflight enforces the complete external allowlist", () => {
+  const intervention = createPmid42717033InterventionInput();
+  assert.deepEqual(validateContextualScientificMaterialInput(intervention), {
+    valid: true,
+    errors: [],
+  });
+  const missingReference = validateContextualScientificMaterialInput({
+    ...intervention,
+    authorizedExternalContextReferenceIds: [PMID_42717033_CONTEXT_REFERENCE_IDS[0]],
+  });
+  assert.equal(missingReference.valid, false);
+  assert.ok(
+    missingReference.errors.some(
+      ({ code, message }) =>
+        code === "EXTERNAL_CONTEXT_REFERENCE_NOT_FOUND" &&
+        message.includes(PMID_42717033_CONTEXT_REFERENCE_IDS[1]),
+    ),
+  );
+});
+
+test("the intervention changes only lateral context and exposes both claim IDs for grounding", () => {
+  const intervention = createPmid42717033InterventionInput();
+  assert.strictEqual(intervention.factSet, input.factSet);
+  assert.strictEqual(intervention.interpretationArtifact, input.interpretationArtifact);
+
+  const controlAuthority = deriveEditorialScientificAuthority(
+    input.factSet,
+    input.interpretationArtifact,
+  );
+  const interventionAuthority = deriveEditorialScientificAuthority(
+    intervention.factSet,
+    intervention.interpretationArtifact,
+  );
+  assert.deepEqual(interventionAuthority.quantitativeClaims, controlAuthority.quantitativeClaims);
+  assert.deepEqual(interventionAuthority.inferenceBoundaries, controlAuthority.inferenceBoundaries);
+
+  const groundedDraft = structuredClone(pmid42717033ExperimentalDraft);
+  groundedDraft.blocks.push({
+    id: "contextual-endpoint-explanation",
+    kind: "contextual_explainer",
+    disclosureLayer: "deep_dive",
+    claims: [
+      {
+        id: "contextual-endpoint-claim",
+        text: "Os dois desfechos descrevem dimensões diferentes.",
+        statementKind: "contextual_explanation",
+        grounding: {
+          factIds: [],
+          interpretationClaimIds: [],
+          evidenceAnchorIds: [],
+          sourceDocumentIds: [],
+          contextualClaimIds: pmid42717033ContextualMaterial.map(({ claims }) => claims[0].id),
+        },
+        quantitativeClaims: [],
+        sourceRequirement: "declared_coverage",
+      },
+    ],
+  });
+  assert.deepEqual(validateScientificEditorialDraft({ draft: groundedDraft, ...intervention }), {
+    valid: true,
+    errors: [],
+  });
+  assert.equal(groundedDraft.schemaVersion, SCIENTIFIC_EDITORIAL_DRAFT_VERSION);
+  assert.equal(SCIENTIFIC_EDITORIAL_PROMPT_VERSION, "scientific-editorial-prompt.v6");
+  assert.equal(groundedDraft.requiresHumanReview, true);
+  assert.equal(groundedDraft.reviewStatus, "pending");
+});
 
 type JsonSchemaNode = Record<string, unknown>;
 
@@ -345,13 +471,19 @@ test("provider errors are structured and are not retried", async () => {
 
 test("one mocked generation captures safe usage and validates before returning the draft", async () => {
   let calls = 0;
+  let observedContext: unknown;
   const result = await runRealEditorialGeneration(
     { articleId: SCIENTIFIC_EDITORIAL_CANARY_ARTICLE_ID, confirmRealGeneration: true },
     {
       env: { OPENAI_API_KEY: "test-only", SCIENTIFIC_EDITORIAL_MODEL: "test-model" },
       transport: {
-        async create() {
+        async create(request) {
           calls += 1;
+          observedContext = (
+            JSON.parse(String(request.input)) as {
+              scientificAuthority: { contextualMaterial: unknown };
+            }
+          ).scientificAuthority.contextualMaterial;
           return {
             id: "response-test",
             model: "test-model-2026-09-01",
@@ -376,6 +508,7 @@ test("one mocked generation captures safe usage and validates before returning t
     },
   );
   assert.equal(calls, 1);
+  assert.deepEqual(observedContext, pmid42717033ContextualMaterial);
   assert.equal(result.validationStatus, "structurally_valid");
   assert.equal(result.model, "test-model");
   assert.equal(result.responseModel, "test-model-2026-09-01");

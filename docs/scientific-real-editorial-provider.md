@@ -44,3 +44,10 @@ The response is ephemeral and contains generation/article IDs, model and prompt 
 duration, safe token usage when supplied, validation status/errors, and a draft only after validation.
 It is not persisted, published or connected to Home, feed, catalog or the preview laboratory. Neither
 scientific payloads nor credentials are logged.
+
+For the controlled intervention on `pmid:42717033`, the contextual input is a manual,
+human-reviewed fixture containing exactly two descriptive claims. The system does not acquire
+context automatically. Its FDA qualification and PubMed IDs are auditable identifiers of the two
+selected sources; their explicit allowlisting authorizes them only for this experiment and does not
+generalize authorization to other external sources. This lateral context is not a Scientific Fact
+of the Mitiperstat article. The historical control remains reproducible with `contextualMaterial: []`.
