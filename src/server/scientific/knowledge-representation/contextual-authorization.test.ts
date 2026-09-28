@@ -104,10 +104,94 @@ function candidateInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function candidateRegistry(inputs = [candidateInput()]) {
+function candidateRegistry(
+  inputs = [candidateInput()],
+  contextualNeeds: readonly ContextualNeed[] = [need],
+) {
   const { references, acquisitions } = boundaries();
-  return createContextualClaimCandidateRegistry([need], references, acquisitions, inputs as never);
+  return createContextualClaimCandidateRegistry(
+    contextualNeeds,
+    references,
+    acquisitions,
+    inputs as never,
+  );
 }
+
+test("contextual need identity is stable and covers its complete semantic content", () => {
+  const identical = structuredClone(need);
+  const differentQuestion = {
+    ...structuredClone(need),
+    contextualQuestion: "Which domain does Measure assess?",
+  };
+  const differentPurpose = {
+    ...structuredClone(need),
+    editorialPurpose: "describe_endpoint_measure",
+  } as unknown as ContextualNeed;
+  const differentEvidence = {
+    ...structuredClone(need),
+    evidenceAnchorIds: ["evidence:2"],
+  };
+  const differentFacts = {
+    ...structuredClone(need),
+    supportingFactIds: ["fact:1", "fact:3"],
+  };
+
+  assert.equal(contextualNeedId(need), contextualNeedId(identical));
+  assert.match(
+    contextualNeedId(need),
+    /^contextual-need:article:synthetic-001:endpoint-1:[a-f0-9]{64}$/,
+  );
+  for (const changed of [differentQuestion, differentPurpose, differentEvidence, differentFacts])
+    assert.notEqual(contextualNeedId(need), contextualNeedId(changed));
+});
+
+test("the registry rejects only truly identical contextual needs as duplicates", () => {
+  assert.throws(
+    () => candidateRegistry([], [need, structuredClone(need)]),
+    /Duplicate contextual need ID/,
+  );
+
+  const semanticallyDifferent = {
+    ...structuredClone(need),
+    contextualQuestion: "Which domain does Measure assess?",
+  };
+  assert.doesNotThrow(() => candidateRegistry([], [need, semanticallyDifferent]));
+});
+
+test("a candidate cannot resolve through a semantically different need for the same endpoint", () => {
+  const semanticallyDifferent = {
+    ...structuredClone(need),
+    contextualQuestion: "Which domain does Measure assess?",
+  };
+  assert.throws(
+    () => candidateRegistry([candidateInput()], [semanticallyDifferent]),
+    /Unknown contextual need ID/,
+  );
+});
+
+test("authorization for the original need does not authorize the same claim under an altered need", () => {
+  const originalCandidates = candidateRegistry();
+  const originalCandidate = originalCandidates.resolve(candidateInput().id);
+  const authorization = createContextualAuthorizationRegistry(originalCandidates, [
+    {
+      id: "contextual-authorization:need-scope:v1",
+      claimCandidateId: originalCandidate.id,
+      decision: "authorized",
+      reviewer: { id: "reviewer:human-1" },
+      reviewedAt: "2026-09-28T13:00:00Z",
+    },
+  ]);
+  const alteredNeed = {
+    ...structuredClone(need),
+    contextualQuestion: "Which domain does Measure assess?",
+  };
+  const alteredCandidate = candidateRegistry(
+    [candidateInput({ contextualNeedId: contextualNeedId(alteredNeed) })],
+    [alteredNeed],
+  ).resolve(originalCandidate.id);
+
+  assert.deepEqual(authorization.authorizedClaims([alteredCandidate]), []);
+});
 
 test("a candidate has complete, anchored lineage and a deterministic exact-claim revision", () => {
   const first = candidateRegistry().resolve(candidateInput().id);

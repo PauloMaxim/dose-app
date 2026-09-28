@@ -74,7 +74,24 @@ export interface ContextualAuthorizationInput {
 }
 
 export function contextualNeedId(need: ContextualNeed) {
-  return `contextual-need:${need.articleId}:${need.subject.endpointId}`;
+  const identity = [
+    need.version,
+    need.articleId,
+    need.subject.kind,
+    need.subject.endpointId,
+    need.subject.name,
+    need.subject.measure,
+    [...need.supportingFactIds].sort(),
+    [...need.evidenceAnchorIds].sort(),
+    need.detectedGap,
+    need.contextualQuestion,
+    need.editorialPurpose,
+    need.method.name,
+    need.method.version,
+    need.status,
+  ];
+  const revision = createHash("sha256").update(JSON.stringify(identity), "utf8").digest("hex");
+  return `contextual-need:${need.articleId}:${need.subject.endpointId}:${revision}`;
 }
 
 function candidateRevision(candidate: Omit<ContextualClaimCandidate, "revision">) {
@@ -134,7 +151,7 @@ export function createContextualClaimCandidateRegistry(
       ...input,
       externalContextAcquisitionAnchorIds: [...input.externalContextAcquisitionAnchorIds],
       editorialPurpose: need.editorialPurpose,
-    } as const;
+    };
     const candidate = contextualClaimCandidateSchema.parse({
       ...withoutRevision,
       revision: candidateRevision(withoutRevision),
