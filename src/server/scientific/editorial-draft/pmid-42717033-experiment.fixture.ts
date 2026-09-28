@@ -15,7 +15,7 @@ const empty = {
   interpretationClaimIds: [] as string[],
   evidenceAnchorIds: [] as string[],
   sourceDocumentIds: [] as string[],
-  externalContextReferenceIds: [] as string[],
+  contextualClaimIds: [] as string[],
 };
 const grounded = (factIds: string[], evidenceAnchorIds: string[]) => ({
   ...empty,
@@ -26,7 +26,7 @@ const grounded = (factIds: string[], evidenceAnchorIds: string[]) => ({
 
 /** Recorded fake-provider response. It uses only the canary's authorized article artifacts. */
 export const pmid42717033ExperimentalDraft = scientificEditorialDraftSchema.parse({
-  schemaVersion: "scientific-editorial-draft.v4",
+  schemaVersion: "scientific-editorial-draft.v5",
   id: "editorial:pmid:42717033:pt-BR:experiment-v1",
   articleId: article,
   language: "pt-BR",

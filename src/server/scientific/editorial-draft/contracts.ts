@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v4" as const;
+export const SCIENTIFIC_EDITORIAL_DRAFT_VERSION = "scientific-editorial-draft.v5" as const;
 export const EDITORIAL_GENERATION_PROFILE_VERSION = "editorial-generation-profile.v1" as const;
 export const CONTEXTUAL_SCIENTIFIC_MATERIAL_VERSION = "contextual-scientific-material.v1" as const;
 
@@ -55,7 +55,7 @@ export const claimGroundingSchema = z
     interpretationClaimIds: z.array(id).default([]),
     evidenceAnchorIds: z.array(id).default([]),
     sourceDocumentIds: z.array(id).default([]),
-    externalContextReferenceIds: z.array(id).default([]),
+    contextualClaimIds: z.array(id).default([]),
   })
   .strict();
 

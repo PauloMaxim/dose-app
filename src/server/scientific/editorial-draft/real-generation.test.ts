@@ -34,6 +34,7 @@ const input = {
   factSet: pmid42717033FactSet,
   interpretationArtifact: pmid42717033Interpretation,
   contextualMaterial: [],
+  authorizedExternalContextReferenceIds: [],
   editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
 };
 const providerRequest = {

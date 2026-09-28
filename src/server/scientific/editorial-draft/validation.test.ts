@@ -5,7 +5,10 @@ import {
   scientificEditorialDraftSchema,
   type ScientificEditorialDraft,
 } from "./contracts";
-import { validateScientificEditorialDraft } from "./validation";
+import {
+  validateContextualScientificMaterialInput,
+  validateScientificEditorialDraft,
+} from "./validation";
 import { DOSE_PROGRESSIVE_EDITORIAL_PROFILE } from "./profile";
 import {
   pmid42717033EvidenceSet,
@@ -15,7 +18,7 @@ import {
 } from "../knowledge-representation/pmid-42717033.fixture";
 
 const base = scientificEditorialDraftSchema.parse({
-  schemaVersion: "scientific-editorial-draft.v4",
+  schemaVersion: "scientific-editorial-draft.v5",
   id: "editorial:pmid:42717033:pt-BR:v1",
   articleId: "pmid:42717033",
   language: "pt-BR",
@@ -40,7 +43,7 @@ const base = scientificEditorialDraftSchema.parse({
             interpretationClaimIds: ["pmid:42717033:interpretation:coprimary-results"],
             evidenceAnchorIds: ["pmid:42717033:abstract:results"],
             sourceDocumentIds: ["pmid:42717033:abstract:v1"],
-            externalContextReferenceIds: [],
+            contextualClaimIds: [],
           },
           epistemicStatus: "observed_clinical_result",
         },
@@ -60,7 +63,7 @@ const base = scientificEditorialDraftSchema.parse({
             interpretationClaimIds: ["pmid:42717033:interpretation:source-boundary"],
             evidenceAnchorIds: [],
             sourceDocumentIds: ["pmid:42717033:abstract:v1"],
-            externalContextReferenceIds: [],
+            contextualClaimIds: [],
           },
           epistemicStatus: "source_coverage",
         },
@@ -82,15 +85,52 @@ function scientificClaim(draft: ScientificEditorialDraft) {
   return claim;
 }
 
-function validate(draft: unknown = base, contextualMaterial: never[] = []) {
+function validate(
+  draft: unknown = base,
+  contextualMaterial: unknown[] = [],
+  authorizedExternalContextReferenceIds: string[] = [],
+) {
   return validateScientificEditorialDraft({
     draft,
     sourceSet: pmid42717033SourceSet,
     evidenceSet: pmid42717033EvidenceSet,
     factSet: pmid42717033FactSet,
     interpretationArtifact: pmid42717033Interpretation,
-    contextualMaterial,
+    contextualMaterial: contextualMaterial as never[],
+    authorizedExternalContextReferenceIds,
     editorialProfile: DOSE_PROGRESSIVE_EDITORIAL_PROFILE,
+  });
+}
+
+function contextMaterial(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: "contextual-scientific-material.v1",
+    id: "context:one",
+    articleId: base.articleId,
+    claims: [
+      {
+        id: "context:claim:one",
+        statement: "Context supplied only for deterministic boundary testing.",
+        epistemicStatus: "hypothesis",
+        provenance: {
+          sourceDocumentIds: [],
+          evidenceAnchorIds: [],
+          externalContextReferenceIds: ["external:one"],
+        },
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function preflight(contextualMaterial: unknown[], authorized = ["external:one"]) {
+  return validateContextualScientificMaterialInput({
+    sourceSet: pmid42717033SourceSet,
+    evidenceSet: pmid42717033EvidenceSet,
+    factSet: pmid42717033FactSet,
+    interpretationArtifact: pmid42717033Interpretation,
+    contextualMaterial,
+    authorizedExternalContextReferenceIds: authorized,
   });
 }
 
@@ -105,6 +145,73 @@ function expectCode(draft: unknown, code: string) {
 
 test("accepts a grounded draft with immutable pending human review", () => {
   assert.deepEqual(validate(), { valid: true, errors: [] });
+});
+
+test("context preflight accepts the empty canary boundary", () => {
+  assert.deepEqual(preflight([], []), { valid: true, errors: [] });
+});
+
+test("context preflight rejects invalid shape and a divergent article", () => {
+  assert.ok(preflight([{ id: "invalid" }]).errors.some(({ code }) => code === "CONTEXT_SCHEMA_INVALID"));
+  assert.ok(
+    preflight([contextMaterial({ articleId: "pmid:different" })]).errors.some(
+      ({ code }) => code === "CONTEXT_ARTICLE_MISMATCH",
+    ),
+  );
+});
+
+test("context preflight rejects duplicate material and globally duplicate claim IDs", () => {
+  const duplicateMaterial = contextMaterial();
+  const report = preflight([duplicateMaterial, structuredClone(duplicateMaterial)]);
+  assert.ok(report.errors.some(({ code }) => code === "CONTEXT_MATERIAL_ID_DUPLICATE"));
+  assert.ok(report.errors.some(({ code }) => code === "CONTEXT_CLAIM_ID_DUPLICATE"));
+});
+
+test("context preflight requires explicit authorization for external provenance", () => {
+  assert.ok(
+    preflight([contextMaterial()], []).errors.some(
+      ({ code }) => code === "EXTERNAL_CONTEXT_REFERENCE_NOT_FOUND",
+    ),
+  );
+  assert.deepEqual(preflight([contextMaterial()]), { valid: true, errors: [] });
+});
+
+test("contextual explanations ground only through contextual claim IDs", () => {
+  const draft = clone();
+  const claim = scientificClaim(draft);
+  claim.statementKind = "contextual_explanation";
+  claim.grounding = {
+    factIds: [],
+    interpretationClaimIds: [],
+    evidenceAnchorIds: [],
+    sourceDocumentIds: [],
+    contextualClaimIds: ["context:claim:one"],
+  };
+  assert.deepEqual(validate(draft, [contextMaterial()], ["external:one"]), {
+    valid: true,
+    errors: [],
+  });
+  claim.grounding.contextualClaimIds = ["context:claim:missing"];
+  assert.ok(
+    validate(draft, [contextMaterial()], ["external:one"]).errors.some(
+      ({ code }) => code === "CONTEXT_CLAIM_NOT_FOUND",
+    ),
+  );
+});
+
+test("article-supported facts cannot substitute contextual claims for article authority", () => {
+  const draft = clone();
+  const claim = scientificClaim(draft);
+  claim.statementKind = "article_supported_fact";
+  claim.grounding = {
+    factIds: [],
+    interpretationClaimIds: [],
+    evidenceAnchorIds: [],
+    sourceDocumentIds: [],
+    contextualClaimIds: ["context:claim:one"],
+  };
+  const report = validate(draft, [contextMaterial()], ["external:one"]);
+  assert.ok(report.errors.some(({ code }) => code === "GROUNDING_KIND_INCOMPATIBLE"));
 });
 
 test("rejects nonexistent fact, interpretation, and evidence IDs", () => {
@@ -156,7 +263,7 @@ test("rejects substantive scientific blocks without grounding", () => {
     interpretationClaimIds: [],
     evidenceAnchorIds: [],
     sourceDocumentIds: [],
-    externalContextReferenceIds: [],
+    contextualClaimIds: [],
   };
   expectCode(draft, "SCIENTIFIC_CLAIM_GROUNDING_REQUIRED");
 });
@@ -208,7 +315,7 @@ test("runtime schema rejects every scientific-claim field on boundary explanatio
       interpretationClaimIds: [],
       evidenceAnchorIds: [],
       sourceDocumentIds: [],
-      externalContextReferenceIds: [],
+      contextualClaimIds: [],
     },
     epistemicStatus: "equivalence",
     quantitativeClaims: [],
