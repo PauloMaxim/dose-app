@@ -103,15 +103,16 @@ are `null`; the real preflight fails closed. A future operator must fill them fr
 OpenAI documentation and a separately authorized, credentialed account-availability check, retaining
 the official URL and UTC consultation timestamp. Until that happens, **execution is blocked**.
 
-| Field                         | Sol               | Luna              |
-| ----------------------------- | ----------------- | ----------------- |
-| Exact provider/model ID       | PENDING — blocked | PENDING — blocked |
-| Available to experiment acct. | PENDING — blocked | PENDING — blocked |
-| Input USD / 1M tokens         | PENDING — blocked | PENDING — blocked |
-| Output USD / 1M tokens        | PENDING — blocked | PENDING — blocked |
-| Reasoning USD / 1M tokens     | PENDING — blocked | PENDING — blocked |
-| Official source URL           | PENDING — blocked | PENDING — blocked |
-| Price/availability checked at | PENDING — blocked | PENDING — blocked |
+| Field                                    | Sol               | Luna              |
+| ---------------------------------------- | ----------------- | ----------------- |
+| Exact provider/model ID                  | PENDING — blocked | PENDING — blocked |
+| Available to experiment acct.            | PENDING — blocked | PENDING — blocked |
+| Input USD / 1M tokens                    | PENDING — blocked | PENDING — blocked |
+| Output USD / 1M tokens                   | PENDING — blocked | PENDING — blocked |
+| Reasoning USD / 1M tokens                | PENDING — blocked | PENDING — blocked |
+| Official source URL                      | PENDING — blocked | PENDING — blocked |
+| Strict-schema/reasoning compatibility    | PENDING — blocked | PENDING — blocked |
+| Price/availability/capability checked at | PENDING — blocked | PENDING — blocked |
 
 ### Fixed shared conditions
 
@@ -126,13 +127,22 @@ the official URL and UTC consultation timestamp. Until that happens, **execution
 - no additional instructions and no variation in the frozen scientific input, authorized context,
   editorial profile, prompt, case ID, or case fingerprint.
 
-The offline preflight materializes the complete provider request for each configured model. Its input
+The offline preflight materializes and deeply freezes the complete provider request for each configured model. Its input
 ceiling is the UTF-8 byte length of the entire serialized request (including instructions and schema),
 a deliberately conservative token upper bound. Its output ceiling is 8,000 tokens, all charged at the
 higher verified output-or-reasoning rate; input is charged at the verified non-cached input rate. The
 two maxima are summed and execution is rejected unless the sum is at most US$ 1.00. Cached-input
 discounts are deliberately ignored. An unknown price makes the calculation unknown and fails the
 preflight rather than being treated as zero.
+
+Each request receives a SHA-256 identity over canonical JSON. The operator confirmation must repeat
+that identity and the exact maximum estimated cost. Immediately before transport invocation, the
+session independently rebuilds the request through the existing generator/adapter path, compares both
+its canonical content and hash to the approved frozen request, and sends a clone of the approved
+request only. A mismatch in model, prompt, inputs, format, reasoning or limits fails before the
+underlying transport. Preflight also rejects equal Sol/Luna IDs, invalid or future verification dates,
+and models whose current official compatibility with strict JSON Schema plus `standard`/`medium`
+reasoning has not been recorded.
 
 ### Pre-execution record (must be completed without committing private output)
 
@@ -152,18 +162,41 @@ preflight rather than being treated as zero.
 
 ### Two independent human confirmations
 
-Confirmation is short-lived, bound to the exact experiment, model, case ID and fingerprint, and
-single-use. It is consumed before transport invocation. A Sol confirmation cannot authorize Luna.
+Confirmation is short-lived, bound to the exact experiment, model, case ID, fingerprint, request hash
+and maximum cost, and single-use. It is consumed before transport invocation. A Sol confirmation
+cannot authorize Luna. The session deliberately exposes no confirmation factory: an operator-controlled
+surface outside the execution session must collect an identified human's explicit attestation and
+construct the record immediately before that individual call. Merely instantiating the session or
+calling `run()` is not authorization.
 
 | Call | Human/operator ID | Confirmation ID | UTC timestamp | Exact model ID | Confirm immediately before call |
 | ---- | ----------------- | --------------- | ------------- | -------------- | ------------------------------- |
 | Sol  | _________________ | _______________ | _____________ | ______________ | YES / NOT AUTHORIZED            |
 | Luna | _________________ | _______________ | _____________ | ______________ | YES / NOT AUTHORIZED            |
 
-The session returns the original provider response envelope, provider usage/response metadata,
+The session returns the **normalized transport response** retained by the existing adapter—not a claim
+that the complete original HTTP envelope/body was preserved—plus provider usage/response metadata,
 client-measured duration, deterministic-validation result, and the separate conservative cost. The
 provider-reported cost remains a distinct nullable field and is never inferred from the estimate.
 Capture is in memory only: there is no endpoint, filesystem writer, Supabase persistence, feed,
 preview, publication, or automatic export. The operator must place any approved private records only
 in the restricted experiment storage defined outside this repository and then use the Phase 1.9A
 offline laboratory for comparison and blinded review.
+
+### Attempt ledger and session restarts
+
+The session-local confirmation set is not a global call counter. Creating a new process or session
+would reset it, so the code does **not** claim a global limit from memory alone. Every runnable session
+instead requires an injected restricted attempt ledger shared by all sessions for this experiment. Its
+`claim` operation must atomically enforce uniqueness for `{experimentId, caseFingerprint, model}` and
+the two-attempt experiment ceiling before the provider transport is entered. The claim is permanent
+even when the call times out, fails, or returns incomplete output; `complete` records only its eventual
+outcome and never releases the slot.
+
+For the controlled run, provision an access-restricted, append-only experiment record outside product
+storage, reviewed by the operator before either call. It must not be a public endpoint, production
+Supabase table, feed integration, or repository file. Both sessions must use the same ledger instance
+or backend. Record only experiment/case/model/request/confirmation identities, timestamps and outcome;
+never credentials or private response content. If an atomic shared ledger is unavailable, execution
+remains blocked. The repository supplies only the ledger contract because selecting or provisioning a
+real operational store was not authorized in Phase 1.9B.
