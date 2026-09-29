@@ -239,3 +239,21 @@ execution.
 ```text
 execute --protocol <reviewed-protocol.json> --model sol|luna --operator <id> --ledger <shared-path> --capture <private-path>
 ```
+
+### Offline capture adapter
+
+`adaptRestrictedCaptureToRecordedEditorialResponse()` performs the deterministic, I/O-free projection
+into the Phase 1.9A laboratory contract. Experiment ID, case ID/fingerprint and model ID map directly.
+The adapter parses the unchanged normalized `output_text` JSON as the laboratory response, maps only
+complete provider-reported input/output token counts, records the already client-measured duration as
+latency, and leaves cost `null`: the captured conservative maximum is a ceiling, not observed spend.
+The fixed 1.9B request conditions supply the explicit OpenAI provider, 8,000-token output limit, strict
+v5 format, no additional instructions, and `standard`/`medium` reasoning configuration.
+
+The laboratory does not accept operational fields such as request hash, confirmation ID, label,
+timestamps, maximum-cost ceiling, normalized envelope, or the first-pass validation result; those
+remain in the private capture for audit and are not smuggled into its strict input contract. The
+laboratory independently repeats deterministic validation over the parsed original response. Failed,
+incomplete, wrong-case, or non-JSON captures are rejected. Provenance is a required adapter argument,
+so offline tests must explicitly use `synthetic_test_fixture`; only an actual captured provider call
+may be identified as `recorded_model_output`.

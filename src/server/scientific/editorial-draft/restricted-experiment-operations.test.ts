@@ -15,8 +15,14 @@ import {
 import { DurableRestrictedExperimentAttemptLedger } from "./restricted-experiment-ledger.server";
 import {
   assertPrivateCaptureDestination,
+  type PersistedRestrictedExperimentCapture,
   persistRestrictedExperimentCapture,
 } from "./restricted-experiment-capture.server";
+import { adaptRestrictedCaptureToRecordedEditorialResponse } from "./restricted-capture-evaluation-adapter";
+import {
+  createPmid42717033EvaluationCase,
+  evaluateRecordedEditorialResponse,
+} from "./evaluation-lab";
 import {
   checkOpenAIModelAvailability,
   confirmAndRunRestrictedExperimentCall,
@@ -189,7 +195,9 @@ test("private capture preserves the offline-lab record with restricted permissio
       () => "capture-confirmation",
     );
     const path = await persistRestrictedExperimentCapture(captureDirectory, process.cwd(), capture);
-    const persisted = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    const persisted = JSON.parse(
+      await readFile(path, "utf8"),
+    ) as PersistedRestrictedExperimentCapture;
     assert.equal(persisted.experimentId, capture.experimentId);
     assert.equal(persisted.caseFingerprint, capture.caseFingerprint);
     assert.equal(persisted.requestHash, capture.requestHash);
@@ -207,6 +215,24 @@ test("private capture preserves the offline-lab record with restricted permissio
     assert.equal((await stat(path)).mode & 0o777, 0o600);
     assert.equal((await stat(captureDirectory)).mode & 0o777, 0o700);
 
+    const labRecord = adaptRestrictedCaptureToRecordedEditorialResponse(
+      persisted,
+      "synthetic_test_fixture",
+    );
+    assert.equal(labRecord.provenance, "synthetic_test_fixture");
+    assert.deepEqual(
+      labRecord.response,
+      JSON.parse(capture.normalizedProviderResponse!.output_text!),
+    );
+    assert.deepEqual(labRecord.metrics, {
+      tokenUsage: { inputTokens: 10, outputTokens: 20, source: "provider_reported" },
+      cost: null,
+      latency: { milliseconds: 0, source: "client_measured" },
+    });
+    const report = await evaluateRecordedEditorialResponse(labRecord);
+    assert.equal(report.automaticEvaluation.validationStatus, "passed");
+    assert.equal(report.responseProvenance, "synthetic_test_fixture");
+
     await assert.rejects(
       persistRestrictedExperimentCapture(captureDirectory, process.cwd(), capture),
       /EEXIST/,
@@ -215,6 +241,43 @@ test("private capture preserves the offline-lab record with restricted permissio
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("offline capture adapter rejects incomplete output and never invents partial metrics", () => {
+  const { snapshot } = createPmid42717033EvaluationCase();
+  const base: PersistedRestrictedExperimentCapture = {
+    experimentId: EDITORIAL_REAL_EXPERIMENT_ID,
+    caseId: snapshot.caseId,
+    caseFingerprint: snapshot.caseFingerprint,
+    requestHash: `sha256:${"1".repeat(64)}`,
+    confirmationId: "adapter-test",
+    label: "sol",
+    modelIdentifier: "sol-synthetic-test-model",
+    startedAt: new Date(NOW).toISOString(),
+    durationMs: 10,
+    estimatedMaximumCostUsd: 0.1,
+    providerReportedCostUsd: null,
+    normalizedProviderResponse: {
+      status: "completed",
+      output_text: JSON.stringify(pmid42717033ExperimentalDraft),
+    },
+    providerMetrics: {
+      usage: { inputTokens: 10, outputTokens: -1, totalTokens: 9 },
+    },
+    validationResult: null,
+    outcome: "completed",
+  };
+  const adapted = adaptRestrictedCaptureToRecordedEditorialResponse(base, "synthetic_test_fixture");
+  assert.equal(adapted.metrics?.tokenUsage, null);
+  assert.equal(adapted.metrics?.cost, null);
+  assert.throws(
+    () =>
+      adaptRestrictedCaptureToRecordedEditorialResponse(
+        { ...base, outcome: "failed_or_incomplete" },
+        "synthetic_test_fixture",
+      ),
+    /no complete normalized model response/,
+  );
 });
 
 test("capture failure after transport keeps the durable attempt consumed", async () => {
