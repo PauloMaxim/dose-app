@@ -10,7 +10,10 @@ import {
   type EditorialGenerationProfile,
   type ScientificEditorialDraft,
 } from "./contracts";
-import type { ScientificEditorialProvider } from "./provider.server";
+import type {
+  ScientificEditorialProvider,
+  ScientificEditorialProviderRequest,
+} from "./provider.server";
 import {
   buildScientificEditorialSystemPrompt,
   SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
@@ -53,6 +56,26 @@ export type EditorialGenerationResult =
       candidateDraft?: ScientificEditorialDraft;
     };
 
+export function createScientificEditorialProviderRequest(
+  input: GenerateEditorialDraftInput,
+): ScientificEditorialProviderRequest {
+  const validatedInput = {
+    ...input,
+    contextualMaterial: input.contextualMaterial.map((material) =>
+      contextualScientificMaterialSchema.parse(material),
+    ),
+  };
+  return {
+    promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
+    systemPrompt: buildScientificEditorialSystemPrompt(input.editorialProfile),
+    input: validatedInput,
+    scientificAuthority: deriveEditorialScientificAuthority(
+      validatedInput.factSet,
+      validatedInput.interpretationArtifact,
+    ),
+  };
+}
+
 /** Passing deterministic validation never replaces mandatory human semantic review. */
 export class ValidatedScientificEditorialDraftGenerator {
   constructor(private readonly provider: ScientificEditorialProvider) {}
@@ -60,22 +83,9 @@ export class ValidatedScientificEditorialDraftGenerator {
   async generate(input: GenerateEditorialDraftInput): Promise<EditorialGenerationResult> {
     const contextReport = validateContextualScientificMaterialInput(input);
     if (!contextReport.valid) return { ok: false, errors: contextReport.errors };
-    const validatedInput = {
-      ...input,
-      contextualMaterial: input.contextualMaterial.map((material) =>
-        contextualScientificMaterialSchema.parse(material),
-      ),
-    };
-    const scientificAuthority = deriveEditorialScientificAuthority(
-      validatedInput.factSet,
-      validatedInput.interpretationArtifact,
-    );
-    const output = await this.provider.generate({
-      promptVersion: SCIENTIFIC_EDITORIAL_PROMPT_VERSION,
-      systemPrompt: buildScientificEditorialSystemPrompt(input.editorialProfile),
-      input: validatedInput,
-      scientificAuthority,
-    });
+    const providerRequest = createScientificEditorialProviderRequest(input);
+    const validatedInput = providerRequest.input;
+    const output = await this.provider.generate(providerRequest);
     const parsed = scientificEditorialDraftSchema.safeParse(output);
     const report = validateScientificEditorialDraft({
       draft: output,
