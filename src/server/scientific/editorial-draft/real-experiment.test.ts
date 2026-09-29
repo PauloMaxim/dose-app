@@ -191,6 +191,22 @@ test("preflight rejects equal model IDs, invalid/future dates, and incompatible 
   assert.match(result.blockers.join(" "), /compatibility is unverified/);
 });
 
+test("preflight rejects output-token and timeout values below or above the fixed protocol", () => {
+  for (const [field, value] of [
+    ["maxOutputTokens", 7_999],
+    ["maxOutputTokens", 8_001],
+    ["timeoutMs", 89_999],
+    ["timeoutMs", 90_001],
+  ] as const) {
+    const result = preflightPmid42717033RealExperiment(
+      protocol({ [field]: value } as Partial<EditorialExperimentProtocol>),
+      NOW,
+    );
+    assert.equal(result.ok, false, `${field}=${value} must fail`);
+    assert.match(result.blockers.join(" "), /timeout, output limit/);
+  }
+});
+
 test("protocol mutation after preflight cannot change the approved request", async () => {
   const mutable = protocol();
   const counter = { calls: 0, requests: [] as unknown[] };

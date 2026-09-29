@@ -250,9 +250,8 @@ export function preflightPmid42717033RealExperiment(
     protocol.maxCallsTotal !== 2 ||
     protocol.maxCallsPerModel !== 1 ||
     protocol.retries !== 0 ||
-    protocol.maxOutputTokens <= 0 ||
-    protocol.maxOutputTokens >= 25_000 ||
-    protocol.timeoutMs <= 0 ||
+    protocol.maxOutputTokens !== EDITORIAL_REAL_EXPERIMENT_MAX_OUTPUT_TOKENS ||
+    protocol.timeoutMs !== EDITORIAL_REAL_EXPERIMENT_TIMEOUT_MS ||
     protocol.budgetUsd !== EDITORIAL_REAL_EXPERIMENT_BUDGET_USD ||
     calls
       .map(({ label }) => label)

@@ -169,6 +169,10 @@ surface outside the execution session must collect an identified human's explici
 construct the record immediately before that individual call. Merely instantiating the session or
 calling `run()` is not authorization.
 
+No operator-controlled authorization surface has been provisioned in this phase. The confirmation
+type is only a validation contract and cannot, by itself, prove that a human performed the required
+action. Execution remains blocked until that restricted surface exists and its behavior is reviewed.
+
 | Call | Human/operator ID | Confirmation ID | UTC timestamp | Exact model ID | Confirm immediately before call |
 | ---- | ----------------- | --------------- | ------------- | -------------- | ------------------------------- |
 | Sol  | _________________ | _______________ | _____________ | ______________ | YES / NOT AUTHORIZED            |
@@ -200,3 +204,7 @@ or backend. Record only experiment/case/model/request/confirmation identities, t
 never credentials or private response content. If an atomic shared ledger is unavailable, execution
 remains blocked. The repository supplies only the ledger contract because selecting or provisioning a
 real operational store was not authorized in Phase 1.9B.
+
+Likewise, `RestrictedExperimentAttemptLedger` is only a contract: no real shared ledger backend has
+been provisioned. Supplying an ad hoc in-memory implementation does not establish a cross-process
+limit and does not authorize execution.
