@@ -37,6 +37,7 @@ export const contextualReferenceReusePolicySchema = z
   .object({
     schemaVersion: z.literal(CONTEXTUAL_REFERENCE_REUSE_POLICY_VERSION),
     maximumAgeDays: z.number().int().nonnegative().nullable(),
+    maximumObservationAgeDays: z.number().int().nonnegative(),
     acceptedContentScopes: z.array(contentScopeSchema).min(1),
     allowedAccessStatuses: z.array(z.enum(["publicly_accessible", "restricted", "unknown"])).min(1),
     requireDeclaredLicense: z.boolean(),
@@ -60,8 +61,21 @@ export const verifiedSourceObservationSchema = z
     verifiedBy: z.object({ id }).strict(),
     sourceState: z.enum(["unchanged", "changed", "unknown"]),
     sourceVersion: z.string().trim().min(1).max(200).nullable(),
-    checksum: checksum.nullable(),
-    anchorsIntegrity: z.enum(["valid", "invalid", "unknown"]),
+    declaredSourceChecksum: checksum.nullable(),
+    declaredAnchorsIntegrity: z.enum(["valid", "invalid", "unknown"]),
+    externalVerification: z.discriminatedUnion("status", [
+      z.object({ status: z.literal("not_provided") }).strict(),
+      z
+        .object({
+          status: z.literal("source_checked"),
+          method: z.literal("manual_source_comparison"),
+          evidenceLocator: z
+            .url()
+            .refine((value) => ["http:", "https:"].includes(new URL(value).protocol)),
+          comparedContentScope: contentScopeSchema,
+        })
+        .strict(),
+    ]),
   })
   .strict();
 
@@ -86,6 +100,10 @@ export const CONTEXTUAL_REFERENCE_REUSE_REASON_CODES = [
   "SOURCE_CHANGED",
   "SOURCE_VERSION_CHANGED",
   "SOURCE_VERSION_UNCONFIRMED",
+  "OBSERVATION_CHECKSUM_UNAVAILABLE",
+  "OBSERVATION_EVIDENCE_INSUFFICIENT",
+  "OBSERVATION_OUTSIDE_TEMPORAL_POLICY",
+  "OBSERVATIONS_CONTRADICTORY",
   "TEMPORAL_POLICY_SATISFIED",
   "TEMPORAL_STATUS_UNDETERMINED",
   "ACCESS_INCOMPATIBLE_WITH_POLICY",
@@ -108,6 +126,13 @@ export const contextualReferenceReuseEvaluationSchema = z
     ]),
     temporalPolicyCompliance: z.enum(["compliant", "noncompliant", "indeterminate"]),
     externalSourceCurrency: z.enum(["confirmed_current", "known_changed", "unconfirmed"]),
+    evidenceAssessment: z
+      .object({
+        localAcquisitionIntegrity: z.enum(["valid", "invalid", "not_available"]),
+        localAnchorIntegrity: z.enum(["valid", "invalid", "not_available"]),
+        externalObservationEvidence: z.enum(["sufficient", "insufficient", "not_available"]),
+      })
+      .strict(),
     artifactIds: z
       .object({
         articleId: id,
@@ -161,6 +186,8 @@ const refreshReasons = new Set<ContextualReferenceReuseReasonCode>([
   "LICENSE_INCOMPATIBLE_WITH_POLICY",
   "SOURCE_VERSION_CHANGED",
   "SOURCE_VERSION_UNCONFIRMED",
+  "OBSERVATION_CHECKSUM_UNAVAILABLE",
+  "OBSERVATION_EVIDENCE_INSUFFICIENT",
   "TEMPORAL_STATUS_UNDETERMINED",
   "ACCESS_INCOMPATIBLE_WITH_POLICY",
   "VERIFIED_OBSERVATION_FUTURE_DATED",
@@ -179,6 +206,20 @@ function candidateKey(candidate: BibliographicCandidate | undefined) {
   return candidate
     ? `${candidate.canonicalIdentifier.scheme}:${candidate.canonicalIdentifier.value}`
     : null;
+}
+
+function localAnchorsAreValid(acquisition: ExternalContextAcquisition) {
+  const content = Array.from(acquisition.content.value);
+  const anchorIds = new Set<string>();
+  return acquisition.anchors.every((anchor) => {
+    if (anchorIds.has(anchor.id)) return false;
+    anchorIds.add(anchor.id);
+    return (
+      anchor.acquisitionId === acquisition.id &&
+      anchor.locator.end > anchor.locator.start &&
+      content.slice(anchor.locator.start, anchor.locator.end).join("") === anchor.excerpt
+    );
+  });
 }
 
 /**
@@ -284,6 +325,7 @@ export function evaluateContextualReferenceReuse(
       ),
     );
   const validObservations: VerifiedSourceObservation[] = [];
+  const scopedObservations: VerifiedSourceObservation[] = [];
   for (const observationResult of observations) {
     if (!observationResult.success) {
       reasons.add("VERIFIED_OBSERVATION_INVALID");
@@ -303,33 +345,70 @@ export function evaluateContextualReferenceReuse(
       reasons.add("VERIFIED_OBSERVATION_FUTURE_DATED");
       continue;
     }
+    scopedObservations.push(observation);
+  }
+
+  const recentObservations = scopedObservations.filter((observation) => {
+    const isRecent =
+      asOfTime - Date.parse(observation.observedAt) <=
+      policy.maximumObservationAgeDays * 86_400_000;
+    if (!isRecent) reasons.add("OBSERVATION_OUTSIDE_TEMPORAL_POLICY");
+    return isRecent;
+  });
+  const declaredStates = new Set(
+    recentObservations.map(({ sourceState }) => sourceState).filter((state) => state !== "unknown"),
+  );
+  if (declaredStates.size > 1) reasons.add("OBSERVATIONS_CONTRADICTORY");
+
+  for (const observation of recentObservations) {
     if (observation.sourceState === "changed") reasons.add("SOURCE_CHANGED");
-    if (observation.anchorsIntegrity === "invalid") reasons.add("ANCHORS_INVALID");
-    if (observation.anchorsIntegrity === "unknown") reasons.add("ANCHORS_UNCONFIRMED");
-    if (observation.checksum && acquisition && observation.checksum !== acquisition.checksum.value)
-      reasons.add("CHECKSUM_CHANGED");
+    if (observation.declaredAnchorsIntegrity === "invalid") reasons.add("ANCHORS_INVALID");
     if (observation.sourceVersion && reference?.sourceVersion) {
       if (observation.sourceVersion !== reference.sourceVersion)
         reasons.add("SOURCE_VERSION_CHANGED");
-    } else if (reference?.sourceVersion || observation.sourceVersion)
-      reasons.add("SOURCE_VERSION_UNCONFIRMED");
+    }
+    if (
+      observation.declaredSourceChecksum &&
+      acquisition &&
+      observation.declaredSourceChecksum !== acquisition.checksum.value
+    )
+      reasons.add("CHECKSUM_CHANGED");
   }
 
-  const scopedObservations = validObservations.filter(
+  const completeCurrentObservations = recentObservations.filter(
     (observation) =>
-      reference &&
-      observation.referenceId === reference.id &&
-      (observation.acquisitionId === undefined || observation.acquisitionId === acquisition?.id) &&
-      Date.parse(observation.observedAt) <= asOfTime,
+      acquisition !== undefined &&
+      observation.acquisitionId === acquisition.id &&
+      observation.sourceState === "unchanged" &&
+      observation.declaredSourceChecksum === acquisition.checksum.value &&
+      observation.declaredAnchorsIntegrity === "valid" &&
+      observation.externalVerification.status === "source_checked" &&
+      observation.externalVerification.comparedContentScope === acquisition.contentScope &&
+      (!reference?.sourceVersion || observation.sourceVersion === reference.sourceVersion),
   );
-  if (scopedObservations.some(({ sourceState }) => sourceState === "changed"))
+  if (recentObservations.some(({ sourceState }) => sourceState === "changed"))
     externalSourceCurrency = "known_changed";
-  else if (
-    scopedObservations.length > 0 &&
-    scopedObservations.every(({ sourceState }) => sourceState === "unchanged")
-  )
-    externalSourceCurrency = "confirmed_current";
-  else reasons.add("EXTERNAL_CURRENCY_UNCONFIRMED");
+  else if (completeCurrentObservations.length > 0) externalSourceCurrency = "confirmed_current";
+  else {
+    reasons.add("EXTERNAL_CURRENCY_UNCONFIRMED");
+    if (
+      reference?.sourceVersion &&
+      !recentObservations.some(({ sourceVersion }) => sourceVersion === reference.sourceVersion)
+    )
+      reasons.add("SOURCE_VERSION_UNCONFIRMED");
+    for (const observation of recentObservations) {
+      if (!observation.declaredSourceChecksum) reasons.add("OBSERVATION_CHECKSUM_UNAVAILABLE");
+      if (observation.declaredAnchorsIntegrity === "unknown") reasons.add("ANCHORS_UNCONFIRMED");
+      if (
+        observation.externalVerification.status !== "source_checked" ||
+        observation.acquisitionId !== acquisition?.id ||
+        (acquisition &&
+          observation.externalVerification.status === "source_checked" &&
+          observation.externalVerification.comparedContentScope !== acquisition.contentScope)
+      )
+        reasons.add("OBSERVATION_EVIDENCE_INSUFFICIENT");
+    }
+  }
 
   if (reasons.size === 0) reasons.add("EXTERNAL_CURRENCY_UNCONFIRMED");
   const reasonCodes = [...reasons].sort();
@@ -345,6 +424,24 @@ export function evaluateContextualReferenceReuse(
     state,
     temporalPolicyCompliance,
     externalSourceCurrency,
+    evidenceAssessment: {
+      localAcquisitionIntegrity: input.acquisition
+        ? acquisition
+          ? "valid"
+          : "invalid"
+        : "not_available",
+      localAnchorIntegrity: input.acquisition
+        ? localAnchorsAreValid(input.acquisition)
+          ? "valid"
+          : "invalid"
+        : "not_available",
+      externalObservationEvidence:
+        externalSourceCurrency === "confirmed_current"
+          ? "sufficient"
+          : validObservations.length > 0
+            ? "insufficient"
+            : "not_available",
+    },
     artifactIds: {
       articleId: need.articleId,
       contextualNeedId: exactNeedId,

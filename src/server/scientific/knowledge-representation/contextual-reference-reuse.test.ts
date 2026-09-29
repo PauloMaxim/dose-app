@@ -114,6 +114,7 @@ function candidate(overrides: Partial<BibliographicCandidate> = {}): Bibliograph
 const policy: ContextualReferenceReusePolicy = {
   schemaVersion: "contextual-reference-reuse-policy.v1",
   maximumAgeDays: 30,
+  maximumObservationAgeDays: 7,
   acceptedContentScopes: ["excerpt", "page_or_section", "full_text"],
   allowedAccessStatuses: ["publicly_accessible"],
   requireDeclaredLicense: true,
@@ -131,8 +132,14 @@ function observation(
     verifiedBy: { id: "reviewer:synthetic-human" },
     sourceState: "unchanged",
     sourceVersion: reference.sourceVersion ?? null,
-    checksum: acquisition.checksum.value,
-    anchorsIntegrity: "valid",
+    declaredSourceChecksum: acquisition.checksum.value,
+    declaredAnchorsIntegrity: "valid",
+    externalVerification: {
+      status: "source_checked",
+      method: "manual_source_comparison",
+      evidenceLocator: reference.canonicalLocator,
+      comparedContentScope: acquisition.contentScope,
+    },
     ...overrides,
   };
 }
@@ -177,6 +184,7 @@ test("missing acquisition and insufficient evidence stay explicitly uncertain", 
   assert.deepEqual(result.reasonCodes, [
     "ACQUISITION_ABSENT",
     "EXTERNAL_CURRENCY_UNCONFIRMED",
+    "SOURCE_VERSION_UNCONFIRMED",
     "TEMPORAL_STATUS_UNDETERMINED",
   ]);
 });
@@ -240,13 +248,93 @@ test("source version divergence and explicit age policy require reverification",
   assert.equal(noMaximum.state, "candidate_for_reuse_with_human_review");
 });
 
+test("observation freshness is independent from acquisition temporal compliance", () => {
+  const result = evaluate({
+    asOf: "2026-10-01T12:00:00Z",
+    verifiedObservations: [observation({ observedAt: "2026-09-20T12:00:00Z" })],
+  });
+  assert.equal(result.temporalPolicyCompliance, "compliant");
+  assert.equal(result.externalSourceCurrency, "unconfirmed");
+  assert.equal(result.state, "update_or_reverification_required");
+  assert.ok(result.reasonCodes.includes("OBSERVATION_OUTSIDE_TEMPORAL_POLICY"));
+  assert.ok(result.reasonCodes.includes("EXTERNAL_CURRENCY_UNCONFIRMED"));
+});
+
+test("observation limits remain enforced when acquisition age has no limit", () => {
+  const result = evaluate({
+    asOf: "2036-09-28T12:00:00Z",
+    policy: { ...policy, maximumAgeDays: null, maximumObservationAgeDays: 7 },
+  });
+  assert.equal(result.temporalPolicyCompliance, "compliant");
+  assert.equal(result.externalSourceCurrency, "unconfirmed");
+  assert.equal(result.state, "update_or_reverification_required");
+});
+
+test("unchanged declarations without checksum or external checking are insufficient", () => {
+  const withoutChecksum = evaluate({
+    verifiedObservations: [observation({ declaredSourceChecksum: null })],
+  });
+  assert.equal(withoutChecksum.externalSourceCurrency, "unconfirmed");
+  assert.ok(withoutChecksum.reasonCodes.includes("OBSERVATION_CHECKSUM_UNAVAILABLE"));
+
+  const withoutExternalEvidence = evaluate({
+    verifiedObservations: [observation({ externalVerification: { status: "not_provided" } })],
+  });
+  assert.equal(withoutExternalEvidence.externalSourceCurrency, "unconfirmed");
+  assert.ok(withoutExternalEvidence.reasonCodes.includes("OBSERVATION_EVIDENCE_INSUFFICIENT"));
+  assert.equal(
+    withoutExternalEvidence.evidenceAssessment.externalObservationEvidence,
+    "insufficient",
+  );
+});
+
+test("unknown declared anchor integrity cannot confirm external currency", () => {
+  const result = evaluate({
+    verifiedObservations: [observation({ declaredAnchorsIntegrity: "unknown" })],
+  });
+  assert.equal(result.evidenceAssessment.localAnchorIntegrity, "valid");
+  assert.equal(result.externalSourceCurrency, "unconfirmed");
+  assert.ok(result.reasonCodes.includes("ANCHORS_UNCONFIRMED"));
+});
+
+test("a recent complete observation can supersede an older observation deterministically", () => {
+  const observations = [
+    observation({ id: "observation:old", observedAt: "2026-09-01T12:00:00Z" }),
+    observation({ id: "observation:recent", observedAt: "2026-09-28T11:00:00Z" }),
+  ];
+  const forward = evaluate({ verifiedObservations: observations });
+  const reverse = evaluate({ verifiedObservations: [...observations].reverse() });
+  assert.deepEqual(forward, reverse);
+  assert.equal(forward.externalSourceCurrency, "confirmed_current");
+  assert.equal(forward.state, "candidate_for_reuse_with_human_review");
+  assert.ok(forward.reasonCodes.includes("OBSERVATION_OUTSIDE_TEMPORAL_POLICY"));
+});
+
+test("contradictory recent observations fail closed regardless of ordering", () => {
+  const observations = [
+    observation({ id: "observation:unchanged" }),
+    observation({
+      id: "observation:changed",
+      observedAt: "2026-09-28T11:30:00Z",
+      sourceState: "changed",
+    }),
+  ];
+  const forward = evaluate({ verifiedObservations: observations });
+  const reverse = evaluate({ verifiedObservations: [...observations].reverse() });
+  assert.deepEqual(forward, reverse);
+  assert.equal(forward.externalSourceCurrency, "known_changed");
+  assert.equal(forward.state, "reuse_blocked");
+  assert.ok(forward.reasonCodes.includes("OBSERVATIONS_CONTRADICTORY"));
+  assert.ok(forward.reasonCodes.includes("SOURCE_CHANGED"));
+});
+
 test("known content changes, invalid checksum, and invalid anchors block reuse", () => {
   const changed = evaluate({
     verifiedObservations: [
       observation({
         sourceState: "changed",
-        checksum: "f".repeat(64),
-        anchorsIntegrity: "invalid",
+        declaredSourceChecksum: "f".repeat(64),
+        declaredAnchorsIntegrity: "invalid",
       }),
     ],
   });
