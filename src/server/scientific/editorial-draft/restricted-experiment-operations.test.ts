@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -12,6 +13,10 @@ import {
   type ExperimentAttemptClaim,
 } from "./real-experiment.server";
 import { DurableRestrictedExperimentAttemptLedger } from "./restricted-experiment-ledger.server";
+import {
+  assertPrivateCaptureDestination,
+  persistRestrictedExperimentCapture,
+} from "./restricted-experiment-capture.server";
 import {
   checkOpenAIModelAvailability,
   confirmAndRunRestrictedExperimentCall,
@@ -160,3 +165,139 @@ test("operator sees bound call details and exact attestation is required before 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("private capture preserves the offline-lab record with restricted permissions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dose-editorial-capture-"));
+  const ledgerDirectory = join(root, "ledger");
+  const captureDirectory = join(root, "captures");
+  await mkdir(captureDirectory);
+  const transport = successfulCaptureTransport();
+  try {
+    const current = new Pmid42717033RealExperimentSession(
+      verifiedProtocol(),
+      transport,
+      "synthetic-test-key",
+      new DurableRestrictedExperimentAttemptLedger(ledgerDirectory),
+      () => NOW,
+    );
+    const capture = await confirmAndRunRestrictedExperimentCall(
+      current,
+      "sol",
+      "operator:test",
+      async () => EDITORIAL_OPERATOR_ATTESTATION,
+      () => NOW,
+      () => "capture-confirmation",
+    );
+    const path = await persistRestrictedExperimentCapture(captureDirectory, process.cwd(), capture);
+    const persisted = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    assert.equal(persisted.experimentId, capture.experimentId);
+    assert.equal(persisted.caseFingerprint, capture.caseFingerprint);
+    assert.equal(persisted.requestHash, capture.requestHash);
+    assert.equal(persisted.modelIdentifier, capture.modelIdentifier);
+    assert.deepEqual(
+      persisted.normalizedProviderResponse,
+      JSON.parse(JSON.stringify(capture.normalizedProviderResponse)),
+    );
+    assert.deepEqual(
+      persisted.providerMetrics,
+      JSON.parse(JSON.stringify(capture.providerMetrics)),
+    );
+    assert.deepEqual(persisted.validationResult, JSON.parse(JSON.stringify(capture.result)));
+    assert.doesNotMatch(JSON.stringify(persisted), /synthetic-test-key/);
+    assert.equal((await stat(path)).mode & 0o777, 0o600);
+    assert.equal((await stat(captureDirectory)).mode & 0o777, 0o700);
+
+    await assert.rejects(
+      persistRestrictedExperimentCapture(captureDirectory, process.cwd(), capture),
+      /EEXIST/,
+    );
+    assert.deepEqual(JSON.parse(await readFile(path, "utf8")), persisted);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("capture failure after transport keeps the durable attempt consumed", async () => {
+  const root = await mkdtemp(join(tmpdir(), "dose-editorial-capture-failure-"));
+  const ledger = new DurableRestrictedExperimentAttemptLedger(join(root, "ledger"));
+  const captureDirectory = join(root, "captures");
+  let calls = 0;
+  try {
+    await mkdir(captureDirectory);
+    await assertPrivateCaptureDestination(captureDirectory, process.cwd());
+    const current = new Pmid42717033RealExperimentSession(
+      verifiedProtocol(),
+      successfulCaptureTransport(() => calls++),
+      "synthetic-test-key",
+      ledger,
+      () => NOW,
+    );
+    const capture = await confirmAndRunRestrictedExperimentCall(
+      current,
+      "luna",
+      "operator:test",
+      async () => EDITORIAL_OPERATOR_ATTESTATION,
+      () => NOW,
+      () => "failed-write-confirmation",
+    );
+    await rm(captureDirectory, { recursive: true });
+    await assert.rejects(
+      persistRestrictedExperimentCapture(captureDirectory, process.cwd(), capture),
+      /ENOENT/,
+    );
+    const restarted = new Pmid42717033RealExperimentSession(
+      verifiedProtocol(),
+      successfulCaptureTransport(() => calls++),
+      "synthetic-test-key",
+      ledger,
+      () => NOW,
+    );
+    await assert.rejects(
+      confirmAndRunRestrictedExperimentCall(
+        restarted,
+        "luna",
+        "operator:test",
+        async () => EDITORIAL_OPERATOR_ATTESTATION,
+        () => NOW,
+        () => "retry-after-write-failure",
+      ),
+      /attempt limit is exhausted/,
+    );
+    assert.equal(calls, 1);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("capture destination rejects repository paths and blocked CLI preflight exits nonzero", async () => {
+  await assert.rejects(
+    assertPrivateCaptureDestination(process.cwd(), process.cwd()),
+    /outside the repository/,
+  );
+  const command = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "scripts/scientific-editorial-experiment.ts", "preflight"],
+    { cwd: process.cwd(), encoding: "utf8" },
+  );
+  assert.equal(command.status, 2, command.stderr);
+  assert.match(command.stdout, /Preflight: BLOCKED/);
+  assert.match(command.stdout, /exact model identifier is unverified/);
+  assert.match(command.stdout, /balance or spend capacity is unverified/);
+});
+
+function successfulCaptureTransport(
+  onCall: () => void = () => undefined,
+): OpenAIEditorialTransport {
+  return {
+    async create(request) {
+      onCall();
+      return {
+        id: "response-private-capture",
+        model: String(request.model),
+        status: "completed",
+        output_text: JSON.stringify(pmid42717033ExperimentalDraft),
+        usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+      };
+    },
+  };
+}

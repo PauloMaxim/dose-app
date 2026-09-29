@@ -12,6 +12,10 @@ import {
 import { openAIEditorialFetchTransport } from "../src/server/scientific/editorial-draft/openai.server";
 import { DurableRestrictedExperimentAttemptLedger } from "../src/server/scientific/editorial-draft/restricted-experiment-ledger.server";
 import {
+  assertPrivateCaptureDestination,
+  persistRestrictedExperimentCapture,
+} from "../src/server/scientific/editorial-draft/restricted-experiment-capture.server";
+import {
   checkOpenAIModelAvailability,
   confirmAndRunRestrictedExperimentCall,
 } from "../src/server/scientific/editorial-draft/restricted-experiment-operator.server";
@@ -27,7 +31,7 @@ async function loadProtocol(): Promise<EditorialExperimentProtocol> {
   return JSON.parse(await readFile(path, "utf8")) as EditorialExperimentProtocol;
 }
 
-function printPreflight(protocol: EditorialExperimentProtocol): void {
+function printPreflight(protocol: EditorialExperimentProtocol): boolean {
   const preflight = preflightPmid42717033RealExperiment(protocol);
   console.log(`Experiment: ${preflight.experimentId}`);
   console.log(`Case: ${preflight.caseId}`);
@@ -46,13 +50,14 @@ function printPreflight(protocol: EditorialExperimentProtocol): void {
   console.log(`Budget: US$ ${preflight.budgetUsd.toFixed(2)}`);
   console.log(`Preflight: ${preflight.ok ? "PASS" : "BLOCKED"}`);
   for (const blocker of preflight.blockers) console.log(`  - ${blocker}`);
+  return preflight.ok;
 }
 
 async function main(): Promise<void> {
   const command = process.argv[2] ?? "preflight";
   const protocol = await loadProtocol();
   if (command === "preflight") {
-    printPreflight(protocol);
+    if (!printPreflight(protocol)) process.exitCode = 2;
     return;
   }
   if (command === "availability") {
@@ -76,13 +81,19 @@ async function main(): Promise<void> {
 
   const label = argument("--model") as ExperimentModel | undefined;
   const ledgerDirectory = argument("--ledger");
+  const captureDirectory = argument("--capture");
   const operatorId = argument("--operator");
-  if ((label !== "sol" && label !== "luna") || !ledgerDirectory || !operatorId)
-    throw new Error("execute requires --model sol|luna --ledger <shared-path> --operator <id>");
+  if ((label !== "sol" && label !== "luna") || !ledgerDirectory || !captureDirectory || !operatorId)
+    throw new Error(
+      "execute requires --model sol|luna --ledger <shared-path> --capture <private-path> --operator <id>",
+    );
   const apiKey = process.env.OPENAI_API_KEY ?? "";
   if (!apiKey) throw new Error("OPENAI_API_KEY is required");
 
-  printPreflight(protocol);
+  if (!printPreflight(protocol)) throw new Error("Blocked preflight forbids execution");
+  // Validate the explicitly configured destination before asking for confirmation or entering the
+  // paid-call path. Persistence is repeated after the call to detect a changed/symlinked destination.
+  await assertPrivateCaptureDestination(captureDirectory, process.cwd());
   const session = new Pmid42717033RealExperimentSession(
     protocol,
     openAIEditorialFetchTransport,
@@ -103,8 +114,12 @@ async function main(): Promise<void> {
         return prompt.question(`Type exactly "${details.attestation}" to authorize this call: `);
       },
     );
-    // Deliberately exclude response content. The restricted experiment record must be handled by
-    // the operator outside product storage.
+    const capturePath = await persistRestrictedExperimentCapture(
+      captureDirectory,
+      process.cwd(),
+      capture,
+    );
+    // Deliberately exclude response and validation content from terminal output.
     console.log(
       JSON.stringify(
         {
@@ -118,6 +133,7 @@ async function main(): Promise<void> {
           estimatedMaximumCostUsd: capture.estimatedMaximumCostUsd,
           providerMetrics: capture.providerMetrics,
           outcome: capture.error ? "failed_or_incomplete" : "completed",
+          capturePath,
         },
         null,
         2,

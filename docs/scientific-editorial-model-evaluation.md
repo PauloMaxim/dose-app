@@ -190,11 +190,14 @@ server-only `OPENAI_API_KEY` environment variable.
 The session returns the **normalized transport response** retained by the existing adapter—not a claim
 that the complete original HTTP envelope/body was preserved—plus provider usage/response metadata,
 client-measured duration, deterministic-validation result, and the separate conservative cost. The
-provider-reported cost remains a distinct nullable field and is never inferred from the estimate.
-Capture is in memory only: there is no endpoint, filesystem writer, Supabase persistence, feed,
-preview, publication, or automatic export. The operator must place any approved private records only
-in the restricted experiment storage defined outside this repository and then use the Phase 1.9A
-offline laboratory for comparison and blinded review.
+provider-reported cost remains a distinct nullable field and is never inferred from the estimate. The
+operator command requires `--capture <private-path>` before confirmation or transport entry. That
+existing directory must be outside the repository and every production surface; it is restricted to
+mode `0700`, and each capture is atomically created without overwrite at mode `0600`. The private
+record contains the normalized response and validation result required by the Phase 1.9A offline
+laboratory plus experiment/case/request/model identities and metrics. It contains no API key, and the
+terminal prints only operational metadata and the private path—not scientific response content. A
+post-call write failure leaves the ledger claim consumed and must never trigger a retry.
 
 ### Attempt ledger and session restarts
 
@@ -220,7 +223,8 @@ execution.
 
 1. `npm run experiment:editorial -- preflight --protocol <reviewed-protocol.json>` prints the frozen
    case, both model IDs, request hashes, per-call maxima, combined maximum, and every blocker. The
-   combined conservative maximum must be at most US$ 1.00.
+   combined conservative maximum must be at most US$ 1.00. A blocked result exits nonzero after
+   printing every blocker, so it cannot be treated as a successful automation gate.
 2. After exact IDs are established from official documentation, an authorized operator may run
    `npm run experiment:editorial -- availability --protocol <reviewed-protocol.json>`. This performs
    only `GET /v1/models`, reports whether each exact ID was returned for the account, and never prints
@@ -228,6 +232,10 @@ execution.
    confirmed through an authorized account surface and recorded in the protocol's `accountFunding`
    evidence with an official HTTPS source and UTC timestamp.
 3. Only after the protocol, shared ledger location and preflight have been reviewed, run one model at
-   a time with `npm run experiment:editorial -- execute --protocol <reviewed-protocol.json> --model
-   sol|luna --operator <id> --ledger <shared-path>`. The two paid calls were **not** executed while
-   preparing this tooling.
+   a time with `npm run experiment:editorial --` followed by the `execute` command, reviewed protocol,
+   one model, identified operator, shared ledger and private capture paths. The two paid calls were
+   **not** executed while preparing this tooling.
+
+```text
+execute --protocol <reviewed-protocol.json> --model sol|luna --operator <id> --ledger <shared-path> --capture <private-path>
+```
