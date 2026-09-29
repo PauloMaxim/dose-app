@@ -79,3 +79,91 @@ Before every experiment, require a human operator to approve a written run sheet
 
 Phase 1.9A authorizes none of those calls. The operator must not use the existing real-generation
 endpoint as an implicit batch runner, must not retry, and must stop after recording the two responses.
+
+## Phase 1.9B execution sheet — prepared, blocked, and not executed
+
+Preparation date: **2026-09-29**. No API call was made while preparing this sheet. The checked-in
+protocol is `editorial-experiment:pmid:42717033:phase-1.9b:v1`, exclusively for PMID 42717033, with
+the case identity produced by `createPmid42717033EvaluationCase()`. Immediately before a future run,
+copy the preflight's exact `caseId`, `caseFingerprint`, prompt version, profile, artifact IDs/versions,
+source scopes, and context allowlists here; never transcribe or reconstruct them by hand.
+
+### Verification status and blocking pendencies
+
+The official OpenAI [API pricing page](https://openai.com/api/pricing/) and
+[model documentation](https://platform.openai.com/docs/models) were consulted on **2026-09-29**, but
+the preparation environment could not retrieve either page (HTTP tunnel 403). No official identifier
+or price could therefore be verified from those sources. Account-specific availability was also not
+verified because this preparation is expressly offline and must not use a credential or contact an
+API. In particular, the legacy code default `gpt-6-sol` is **not** evidence that Sol is available and
+must not be copied into this sheet as a verified identifier.
+
+Consequently, both checked-in model identifiers, price records, and account-availability timestamps
+are `null`; the real preflight fails closed. A future operator must fill them from current official
+OpenAI documentation and a separately authorized, credentialed account-availability check, retaining
+the official URL and UTC consultation timestamp. Until that happens, **execution is blocked**.
+
+| Field                         | Sol               | Luna              |
+| ----------------------------- | ----------------- | ----------------- |
+| Exact provider/model ID       | PENDING — blocked | PENDING — blocked |
+| Available to experiment acct. | PENDING — blocked | PENDING — blocked |
+| Input USD / 1M tokens         | PENDING — blocked | PENDING — blocked |
+| Output USD / 1M tokens        | PENDING — blocked | PENDING — blocked |
+| Reasoning USD / 1M tokens     | PENDING — blocked | PENDING — blocked |
+| Official source URL           | PENDING — blocked | PENDING — blocked |
+| Price/availability checked at | PENDING — blocked | PENDING — blocked |
+
+### Fixed shared conditions
+
+- joint budget ceiling: **US$ 1.00**, not a spend target;
+- maximum calls: **two total and one per model**; retries: **zero**;
+- timeout per attempted call: **90,000 ms**; timeout, incomplete output, and provider error still
+  consume that model's sole attempt because they may be billable;
+- maximum Responses output allowance: **8,000 tokens**, shared by visible output and reasoning—not
+  the production adapter's 25,000-token default;
+- response format: `scientific_editorial_draft.v5` strict JSON Schema; `store: false`;
+- reasoning mode/effort: `standard` / `medium` for both models;
+- no additional instructions and no variation in the frozen scientific input, authorized context,
+  editorial profile, prompt, case ID, or case fingerprint.
+
+The offline preflight materializes the complete provider request for each configured model. Its input
+ceiling is the UTF-8 byte length of the entire serialized request (including instructions and schema),
+a deliberately conservative token upper bound. Its output ceiling is 8,000 tokens, all charged at the
+higher verified output-or-reasoning rate; input is charged at the verified non-cached input rate. The
+two maxima are summed and execution is rejected unless the sum is at most US$ 1.00. Cached-input
+discounts are deliberately ignored. An unknown price makes the calculation unknown and fails the
+preflight rather than being treated as zero.
+
+### Pre-execution record (must be completed without committing private output)
+
+| Item                                       | Value                                              |
+| ------------------------------------------ | -------------------------------------------------- |
+| HEAD / reviewed commit                     | ______________________________________             |
+| Experiment ID                              | `editorial-experiment:pmid:42717033:phase-1.9b:v1` |
+| Case ID                                    | ______________________________________             |
+| Case fingerprint                           | ______________________________________             |
+| Prompt version                             | ______________________________________             |
+| Sol maximum input/output/reasoning tokens  | ______________________________________             |
+| Luna maximum input/output/reasoning tokens | ______________________________________             |
+| Sol conservative maximum cost              | US$ __________________________________             |
+| Luna conservative maximum cost             | US$ __________________________________             |
+| Combined conservative maximum cost         | US$ __________________________________             |
+| Preflight result                           | PASS / BLOCKED                                     |
+
+### Two independent human confirmations
+
+Confirmation is short-lived, bound to the exact experiment, model, case ID and fingerprint, and
+single-use. It is consumed before transport invocation. A Sol confirmation cannot authorize Luna.
+
+| Call | Human/operator ID | Confirmation ID | UTC timestamp | Exact model ID | Confirm immediately before call |
+| ---- | ----------------- | --------------- | ------------- | -------------- | ------------------------------- |
+| Sol  | _________________ | _______________ | _____________ | ______________ | YES / NOT AUTHORIZED            |
+| Luna | _________________ | _______________ | _____________ | ______________ | YES / NOT AUTHORIZED            |
+
+The session returns the original provider response envelope, provider usage/response metadata,
+client-measured duration, deterministic-validation result, and the separate conservative cost. The
+provider-reported cost remains a distinct nullable field and is never inferred from the estimate.
+Capture is in memory only: there is no endpoint, filesystem writer, Supabase persistence, feed,
+preview, publication, or automatic export. The operator must place any approved private records only
+in the restricted experiment storage defined outside this repository and then use the Phase 1.9A
+offline laboratory for comparison and blinded review.

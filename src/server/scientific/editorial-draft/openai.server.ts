@@ -68,6 +68,40 @@ export interface OpenAIEditorialTransport {
   }>;
 }
 
+export function buildOpenAIEditorialRequest(
+  request: ScientificEditorialProviderRequest,
+  config: Pick<ScientificEditorialRuntimeConfig, "model" | "maxOutputTokens">,
+): Record<string, unknown> {
+  const input = JSON.stringify({
+    scientificAuthority: {
+      sourceSet: request.input.sourceSet,
+      evidenceSet: request.input.evidenceSet,
+      factSet: request.input.factSet,
+      interpretationArtifact: request.input.interpretationArtifact,
+      contextualMaterial: request.input.contextualMaterial,
+      inferenceBoundaries: request.scientificAuthority.inferenceBoundaries,
+      quantitativeClaims: request.scientificAuthority.quantitativeClaims,
+    },
+    editorialPolicy: request.input.editorialProfile,
+  });
+  return {
+    model: config.model,
+    instructions: request.systemPrompt,
+    input,
+    store: false,
+    reasoning: { mode: "standard", effort: "medium" },
+    max_output_tokens: config.maxOutputTokens,
+    text: {
+      format: {
+        type: "json_schema",
+        name: "scientific_editorial_draft",
+        strict: true,
+        schema: scientificEditorialDraftJsonSchema,
+      },
+    },
+  };
+}
+
 export const openAIEditorialFetchTransport: OpenAIEditorialTransport = {
   async create(request, { signal, apiKey }) {
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -162,18 +196,8 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
   ) {}
 
   async generate(request: ScientificEditorialProviderRequest): Promise<unknown> {
-    const input = JSON.stringify({
-      scientificAuthority: {
-        sourceSet: request.input.sourceSet,
-        evidenceSet: request.input.evidenceSet,
-        factSet: request.input.factSet,
-        interpretationArtifact: request.input.interpretationArtifact,
-        contextualMaterial: request.input.contextualMaterial,
-        inferenceBoundaries: request.scientificAuthority.inferenceBoundaries,
-        quantitativeClaims: request.scientificAuthority.quantitativeClaims,
-      },
-      editorialPolicy: request.input.editorialProfile,
-    });
+    const providerRequest = buildOpenAIEditorialRequest(request, this.config);
+    const input = providerRequest.input as string;
     if (input.length > this.config.maxInputCharacters)
       throw new ScientificEditorialProviderError(
         "payload_too_large",
@@ -182,25 +206,10 @@ export class OpenAIScientificEditorialProvider implements ScientificEditorialPro
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
     try {
-      const response = await this.transport.create(
-        {
-          model: this.config.model,
-          instructions: request.systemPrompt,
-          input,
-          store: false,
-          reasoning: { mode: "standard", effort: "medium" },
-          max_output_tokens: this.config.maxOutputTokens,
-          text: {
-            format: {
-              type: "json_schema",
-              name: "scientific_editorial_draft",
-              strict: true,
-              schema: scientificEditorialDraftJsonSchema,
-            },
-          },
-        },
-        { signal: controller.signal, apiKey: this.config.apiKey },
-      );
+      const response = await this.transport.create(providerRequest, {
+        signal: controller.signal,
+        apiKey: this.config.apiKey,
+      });
       this.observe?.({
         responseModel: response.model,
         serviceTier: response.service_tier,
