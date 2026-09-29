@@ -114,10 +114,10 @@ mas sua integridade e autorização continuam no PostgreSQL.
 | `ContextualNeed`                     | **Persistir**, uma linha imutável por ID/revisão                                   | É o escopo que impede reutilização de claim entre artigo, endpoint ou finalidade diferentes. Reexecução idêntica é idempotente. Uma necessidade recalculada gera outro ID; a antiga pode ser marcada como superada sem ser apagada.                                                                                                    |
 | `BibliographicCandidate`             | **Somente durante a execução**                                                     | É um resultado volátil de busca, não uma nova entidade bibliográfica. Se selecionado, passa pelo pipeline existente para resolver `articles`/`article_sources`; a seleção registra artigo, necessidade, query e provedores, não uma cópia canônica paralela do candidato. Resultados não selecionados não justificam custo e retenção. |
 | `ExternalContextReference`           | **Persistir**                                                                      | É a citação reutilizável. Referência bibliográfica aponta obrigatoriamente para `articles.id`; documentos institucionais preservam seu identificador externo sem fingir ser artigo.                                                                                                                                                    |
-| `ExternalContextAcquisition`         | **Persistir metadados e, condicionalmente, conteúdo**                              | Checksum, licença, método, escopo e horário são necessários para integridade e custo. O conteúdo só é retido quando permitido; sem permissão, registrar `not_stored`, checksum permitido e locator, nunca inventar disponibilidade.                                                                                                    |
+| `ExternalContextAcquisition`         | **Persistir cada captura válida e seu conteúdo verificável**                       | Checksum, licença, método, escopo, horário e payload são necessários para satisfazer o contrato v1. Quando o conteúdo não puder ser retido, registrar somente uma tentativa/observação separada, nunca uma aquisição v1 íntegra.                                                                                                       |
 | anchors de aquisição                 | **Persistir com a aquisição**                                                      | Claims precisam resolver a evidência exata. Intervalos e excerpt são imutáveis e validados contra a versão adquirida; não migram silenciosamente para outra versão.                                                                                                                                                                    |
 | `ContextualClaimCandidate`           | **Persistir cada revisão imutável**                                                | Texto e escopo são objeto de revisão humana. A revisão calculada é chave de idempotência e base exata da autorização.                                                                                                                                                                                                                  |
-| `ContextualAuthorization`            | **Persistir append-only**                                                          | É uma decisão humana auditável. Rejeição também é histórico. Não atualizar a linha para “trocar” decisão; correção ou revogação é novo evento que referencia o anterior.                                                                                                                                                               |
+| `ContextualAuthorization`            | **Persistir append-only**                                                          | É uma decisão humana auditável. Rejeição também é histórico. Uma decisão posterior supersede a anterior por encadeamento de eventos, sem alterar o evento histórico; revogação requer evolução explícita do contrato.                                                                                                                  |
 | `VerifiedSourceObservation`          | **Persistir append-only**                                                          | É evidência humana externa, temporal e cara; sustenta reverificação e precisa identificar revisor. Não altera aquisição histórica.                                                                                                                                                                                                     |
 | `ContextualReferenceReuseEvaluation` | **Derivar sob demanda por padrão; persistir snapshot quando usado em decisão/job** | O resultado depende de `asOf` e da política. Cache genérico fica obsoleto; porém uma avaliação efetivamente usada para selecionar/rejeitar reutilização deve ser congelada com versão da política, inputs e razões para auditoria. Nunca cria autorização.                                                                             |
 
@@ -145,16 +145,23 @@ Restrições: checksum hexadecimal de 64 caracteres; payload coerente com coluna
 
 #### `contextual_references`
 
-- `id text primary key`, `schema_version`, `source_class`;
+- `id text primary key`, `source_class`, `created_at`;
 - `article_id uuid null references articles(id) on delete restrict`;
-- `provider`, `canonical_scheme`, `canonical_value`, `canonical_locator`, título e datas/versão;
-- `created_at`, `updated_at` somente para correções de projeção não científicas.
+- `provider`, `canonical_scheme`, `canonical_value`.
 
 Para `source_class = 'bibliographic_record'`, `article_id` é obrigatório e a identidade bibliográfica
 é herdada do artigo; `canonical_scheme/value` é uma projeção validada, não autoridade concorrente.
 Para documento regulatório/institucional, `article_id` é nulo. Unique normalizado
 `(source_class, provider, canonical_scheme, canonical_value)` evita referências duplicadas. Índice
 `(article_id)` parcial acelera reutilização por artigo.
+
+Os metadados científicos que podem mudar não são sobrescritos nessa identidade. A tabela append-only
+`contextual_reference_versions` contém `(reference_id, revision)` como PK, `schema_version`, locator,
+título, autoridade, datas, `source_version`, checksum do payload de metadados, `observed_at` e
+`created_at`. Cada aquisição aponta para uma revisão exata da referência. Uma correção ou nova
+`sourceVersion` cria outra revisão; a linha antiga continua resolvendo o que aquisições, claims e
+decisões anteriores efetivamente usaram. Uma projeção `current_reference_version` pode acelerar a
+leitura, mas não é fonte histórica nem pode retargetar FKs existentes.
 
 #### `contextual_need_references`
 
@@ -170,19 +177,30 @@ autorização.
 
 #### `external_context_acquisitions`
 
-- `id text primary key`, `reference_id references contextual_references(id) on delete restrict`;
+- `id text primary key`, FK composta para a revisão de `contextual_reference_versions` utilizada;
 - `schema_version`, `retrieved_at`, `content_scope`, `media_type`, método/versão;
 - `access_status`, campos de licença e base de aquisição;
 - `checksum_algorithm = 'sha256'`, `content_checksum`, `byte_length`;
-- `storage_mode in ('not_stored','inline','storage')`, `content_inline text null`,
-  `storage_object_path text null`, `storage_bucket text null`;
+- `storage_mode in ('inline','storage')`, `content_inline text null`, `storage_object_path text null`,
+  `storage_bucket text null`, `blob_id` opcional;
+- `operation_key` e `request_hash` vinculados ao ledger idempotente;
 - `supersedes_acquisition_id null references external_context_acquisitions(id)`;
 - `created_by uuid null references auth.users(id)`, `created_at`.
 
 Check exatamente um modo de conteúdo: `inline` requer texto e proíbe path; `storage` requer bucket e
-path e proíbe texto; `not_stored` proíbe ambos. Unique `(reference_id, content_checksum,
-content_scope)` torna repetição idempotente, sem afirmar que scopes diferentes são equivalentes.
-Índices `(reference_id, retrieved_at desc)` e `(content_checksum)` suportam reutilização e auditoria.
+path e proíbe texto. Não há unique em `(reference_id, content_checksum, content_scope)`: duas capturas
+reais em horários diferentes precisam de duas linhas e de seus próprios `retrieved_at`, ator, método,
+licença e revisão da referência, mesmo quando os bytes forem iguais. Índices não únicos
+`(reference_id, retrieved_at desc)` e `(content_checksum)` suportam histórico e procura de blobs.
+
+`external_context_acquisition_attempts` registra operação, referência/revisão observada,
+`attempted_at`, locator, scope pretendido, status como `content_not_retained`, motivo/licença e ator.
+Ela não possui `content`, checksum verificável nem anchors e **não** é uma
+`ExternalContextAcquisition.v1`: o contrato atual exige `content.value`, checksum correspondente e
+conteúdo capaz de reproduzir seus anchors. Por isso uma tentativa sem retenção não pode ser fornecida
+ao registry v1, ser marcada `ready`, criar claim, validar anchor, sustentar autorização ou aparecer
+como aquisição íntegra numa avaliação de reutilização. Se o conteúdo for indispensável, é necessária
+uma nova aquisição permitida, com payload verificável; até lá, a ausência permanece explícita.
 
 #### `external_context_acquisition_anchors`
 
@@ -196,12 +214,15 @@ banco sozinho não consegue validar offsets dentro de um objeto do Storage.
 
 #### `contextual_claims` e `contextual_claim_revisions`
 
-`contextual_claims(id primary key, contextual_need_id, created_at)` fornece identidade editorial
-estável. Cada `contextual_claim_revisions` contém `claim_id`, `revision` SHA-256, `article_id`,
-`contextual_need_id`, `reference_id`, `acquisition_id`, `statement`, `schema_version`, `created_by`,
-`created_at`, com PK `(claim_id, revision)`. `article_id` deve coincidir com a necessidade; referência
-e aquisição devem coincidir. Índices `(contextual_need_id, created_at desc)` e
-`(acquisition_id)`.
+`contextual_claims(id primary key, article_id, contextual_need_id, editorial_purpose, created_at)`
+fornece identidade editorial estável. Artigo, necessidade e finalidade são invariantes dessa
+identidade; mudar `article_id` ou `contextual_need_id` exige **novo claim**, não uma revisão do claim
+antigo. Cada `contextual_claim_revisions` contém `claim_id`, `revision` SHA-256, `reference_id`, FK
+para a revisão exata da referência, `acquisition_id`, `statement`, `schema_version`, `created_by` e
+`created_at`, com PK `(claim_id, revision)`. Referência, sua versão e aquisição podem evoluir como
+evidência de nova revisão, mas não alteram o escopo estável do claim. A aquisição deve ter usado a
+mesma revisão da referência declarada pela revisão do claim. Índices `(contextual_need_id,
+created_at desc)` e `(acquisition_id)`.
 
 Uma join table `contextual_claim_revision_anchors(claim_id, revision, anchor_id)` tem PK nas três
 colunas e FK composta para a revisão; cada anchor deve pertencer à aquisição da revisão. Pelo menos
@@ -213,15 +234,28 @@ ou função server-only revisada).
 - `id text primary key`, FK composta `(claim_id, claim_revision)` para a revisão exata;
 - cópia verificável de `contextual_need_id`, `article_id`, `reference_id`, `acquisition_id` e
   `scope_checksum`;
-- `decision in ('authorized','rejected','revoked')`, `reviewer_id uuid not null references
-auth.users(id) on delete restrict`, `reviewed_at`, `created_at`;
-- `supersedes_authorization_id null references contextual_authorization_events(id)`.
+- `event_sequence bigint` monotônico dentro de `(claim_id, claim_revision)`;
+- `decision in ('authorized','rejected')`, exatamente como `ContextualAuthorization.v1`;
+- `reviewer_id uuid not null references auth.users(id) on delete restrict`, `reviewed_at`,
+  `recorded_at`;
+- `supersedes_authorization_id` nulo no primeiro evento e obrigatório nos seguintes, com FK para o
+  evento imediatamente anterior da mesma revisão.
 
-Não há `UPDATE` de decisão. Uma unique parcial permite no máximo uma decisão vigente por
-`(claim_id, claim_revision)`, ou o writer serializa pelo claim e fecha a decisão anterior antes de
-inserir a substituta. Índices `(claim_id, claim_revision, reviewed_at desc)` e
-`(reviewer_id, reviewed_at desc)`. A projeção “claim autorizado atual” seleciona a última decisão
-válida para a revisão exata; jamais procura autorização de outra revisão.
+O writer adquire lock por `(claim_id, claim_revision)`, lê o último `event_sequence` e insere em uma
+transação o próximo evento, com `sequence + 1` e predecessor exato. Constraints unique em
+`(claim_id, claim_revision, event_sequence)` e em `supersedes_authorization_id` impedem sequência
+duplicada e bifurcação; conflito concorrente falha e é repetido a partir do novo último evento. A
+decisão vigente é o único evento folha (não referenciado como predecessor), com maior sequência; não
+depende de `reviewed_at`, relógio do cliente ou `UPDATE` de evento histórico. Uma projeção/tabela
+mutável `current_contextual_authorizations` pode ser reconstruída e atualizada atomicamente para
+leitura rápida, mas é cache, não autoridade: o log encadeado append-only prevalece.
+
+`ContextualAuthorization.v1` só admite `authorized` e `rejected`; portanto `revoked` **não** é
+apresentado como decisão existente. Revogação futura exige versão nova e explícita do contrato (por
+exemplo, evento v2 `authorization_revoked` que referencia a autorização alvo), migration aditiva e
+regras de projeção aprovadas. Até isso existir, uma rejeição v1 posterior pode superseder uma
+autorização v1 para a mesma revisão, preservando ambas, mas não deve ser rotulada como revogação.
+Índices `(claim_id, claim_revision, event_sequence desc)` e `(reviewer_id, reviewed_at desc)`.
 
 #### `verified_source_observations`
 
@@ -256,13 +290,14 @@ Só criar snapshot ao consumir o parecer em uma seleção/reverificação/job. O
    aquisição e checksum, nunca do título. O PostgreSQL guarda checksum, tamanho, media type, licença,
    scope e path. Upload deve ir para path temporário, ser verificado e então promovido/registrado; um
    reconciliador remove temporários órfãos após TTL.
-4. **Full text:** `not_stored` por padrão. Só `storage`/`inline` após comprovação explícita de direito
-   de armazenamento e do uso pretendido. “Publicamente acessível”, PMCID ou flag open access, sem
-   licença/base compatível, não basta. A licença pode também impedir exposição ao usuário mesmo que
-   permita processamento interno.
-5. **Sem direito de retenção:** guardar somente metadados permitidos, checksum se permitido, locator,
-   scope `not_stored` e observação de acesso; anchors que dependam do conteúdo não podem ser
-   declarados reutilizáveis localmente. Não guardar trechos como forma de contornar a licença.
+4. **Full text:** não criar aquisição v1 por padrão. Só `storage`/`inline` após comprovação explícita
+   de direito de armazenamento e do uso pretendido. “Publicamente acessível”, PMCID ou flag open
+   access, sem licença/base compatível, não basta. A licença pode também impedir exposição ao usuário
+   mesmo que permita processamento interno.
+5. **Sem direito de retenção:** guardar somente o registro separado de tentativa/observação com
+   metadados permitidos e locator. Ele declara `content_not_retained`, não `not_stored` como se fosse
+   um modo válido de aquisição v1. Sem conteúdo verificável não há checksum local do payload,
+   anchors, claims nem autorização. Não guardar trechos como forma de contornar a licença.
 6. **Deduplicação física:** objetos iguais podem compartilhar blob pelo checksum somente se os
    contextos de licença, retenção e acesso forem compatíveis. Cada aquisição mantém linha e
    proveniência próprias; garbage collection só remove blob sem referência.
@@ -275,23 +310,30 @@ transforma conteúdo restrito em conteúdo redistribuível.
 
 ### Nova aquisição da mesma referência
 
-Criar nova linha; não atualizar a anterior. Conteúdo normalizado e checksum iguais tornam a operação
-idempotente e podem reutilizar o blob. Checksum, versão ou scope diferentes criam nova aquisição com
-`supersedes_acquisition_id`. Claims existentes continuam apontando para a aquisição antiga e não se
-tornam claims da nova.
+Cada captura deliberada cria nova linha e preserva seu próprio `retrieved_at`, mesmo se o conteúdo
+normalizado e o checksum forem iguais. Somente repetir a **mesma operação** (`operation_key` e
+`request_hash` iguais) é idempotente e retorna o mesmo `acquisition_id`; reutilizar a chave com outro
+request falha. Uma nova captura com bytes iguais recebe outro ID, pode apontar
+`supersedes_acquisition_id` para a captura anterior e pode compartilhar o blob se licença, acesso e
+retenção forem compatíveis. Uma captura com bytes alterados recebe novo ID, checksum e blob e exige
+novos anchors. Claims existentes continuam apontando para a aquisição histórica e não se tornam
+claims da nova.
 
 ### Mudança da fonte
 
-Registrar `VerifiedSourceObservation(sourceState = changed)`, bloquear reuse da aquisição afetada e
-obter nova aquisição. Não editar reference/acquisition histórica para parecer atual. Um novo claim
-pode copiar texto como ponto de partida, mas recebe nova revisão, anchors da nova aquisição e revisão
-humana independente.
+Registrar `VerifiedSourceObservation(sourceState = changed)`, criar uma nova revisão append-only da
+referência — inclusive quando muda `sourceVersion` —, bloquear reuse da aquisição afetada e obter
+nova aquisição ligada à nova revisão. Não editar reference version/acquisition histórica para
+parecer atual. Claims e decisões anteriores conservam FKs para a revisão da referência e aquisição
+que efetivamente usaram. Um novo claim revision pode copiar texto como ponto de partida, mas recebe
+nova evidência, anchors e revisão humana independente.
 
 ### Revisão de claim
 
-Qualquer alteração de statement, necessidade, referência, aquisição, anchors ou evidência muda o
-hash de revisão. A autorização anterior permanece no histórico e não aparece na projeção corrente.
-Mesmo texto sobre nova aquisição é nova revisão e **não herda autorização**.
+Alterar statement, referência/revisão de referência, aquisição, anchors ou evidência muda o hash de
+revisão. Artigo, necessidade e finalidade não podem mudar dentro da mesma identidade de claim; essa
+mudança cria outro claim. A autorização anterior permanece no histórico e não aparece na projeção da
+nova revisão. Mesmo texto sobre nova aquisição é nova revisão e **não herda autorização**.
 
 ### Fonte desatualizada
 
@@ -309,20 +351,23 @@ checksum do conteúdo continua sendo a autoridade de integridade do payload.
 ## 7. Idempotência, concorrência e recuperação
 
 - Cada comando de escrita recebe `operation_key` e hash do request em ledger server-only, seguindo o
-  padrão de ingestão. Mesma chave + mesmo hash retorna o resultado anterior; mesma chave + hash
-  diferente falha.
+  padrão de ingestão. Mesma chave + mesmo hash retorna o mesmo resultado, inclusive o mesmo ID de
+  aquisição; mesma chave + hash diferente falha. Uma nova captura intencional usa nova chave e gera
+  outra linha, ainda que seu checksum coincida.
 - Resolver artigo e inserir `article_sources` usa o pipeline existente. Em corrida de DOI/PMID/PMCID
   ou `(provider, external_id)`, capturar somente a violação única esperada, reler a identidade
   vencedora e repetir a transação; não escolher artigo arbitrariamente.
-- Criação de necessidade, referência, aquisição, anchors e revisão ocorre em transação. Checksums são
-  recomputados no servidor confiável, não aceitos do browser como autoridade.
+- Criação de necessidade, revisão de referência, aquisição, anchors e claim revision ocorre em
+  transação. Checksums são recomputados no servidor confiável, não aceitos do browser como
+  autoridade.
 - Workers de aquisição usam claim token, lease curta, tentativas limitadas e compare-and-set na
   finalização, reaproveitando o desenho de summaries. Worker com lease perdido não publica estado.
 - Storage e PostgreSQL não têm transação distribuída: primeiro upload temporário, depois validação e
   insert transacional, finalmente promoção/estado `ready`. Falha deixa item `pending` retomável;
   reconciliador idempotente conclui ou remove temporário. Claims só aceitam aquisição `ready`.
-- Locks/advisory locks por referência evitam duas promoções correntes conflitantes; constraints
-  únicas continuam sendo a barreira final.
+- Locks/advisory locks por referência evitam duas promoções correntes conflitantes sem colapsar duas
+  capturas legítimas. Constraints únicas do ledger protegem a operação, não a combinação de
+  referência/checksum/scope.
 - Deletes físicos ficam proibidos para artefatos referenciados. Retenção/licença usa estado tombstone
   (`content_removed_at`, razão e ator), preservando metadados, checksum e auditoria sem conservar o
   conteúdo proibido.
@@ -370,9 +415,10 @@ As migrations futuras devem impor, além das FKs e checks acima:
 1. todo `contextual_need.article_id` existe e não muda;
 2. referência bibliográfica resolve um único `articles.id`; nenhuma FK bibliográfica aponta para uma
    entidade paralela;
-3. aquisição pertence à referência declarada e anchors pertencem à aquisição;
-4. revisão de claim pertence à mesma necessidade/artigo e usa referência, aquisição e anchors
-   coerentes;
+3. aquisição pertence à revisão imutável da referência declarada, contém payload verificável e
+   anchors pertencem à aquisição; tentativa sem conteúdo nunca satisfaz essa FK;
+4. revisões de um claim preservam artigo, necessidade e finalidade da identidade estável e usam
+   referência, versão, aquisição e anchors coerentes;
 5. autorização referencia PK composta de revisão exata e seu scope checksum é recomputado;
 6. observação com `acquisition_id` pertence à mesma referência;
 7. avaliação registra a política e o conjunto exato de observações, e nunca autoriza editorialmente;
@@ -397,7 +443,8 @@ de identidade e não define nem implementa processamento de diretrizes.
 
 ## 11. Riscos e mitigação
 
-- **Licença ambígua:** default `not_stored`, revisão jurídica/produto antes de retenção ou exposição.
+- **Licença ambígua:** registrar somente tentativa `content_not_retained`, sem criar aquisição v1;
+  exigir revisão jurídica/produto antes de retenção ou exposição.
 - **JSON e schema divergirem:** validar Zod no writer e constraints/projeções no banco; testes de
   compatibilidade por schema version.
 - **Crescimento de histórico:** retenção diferenciada para logs transitórios; preservar decisões e
@@ -421,10 +468,10 @@ de identidade e não define nem implementa processamento de diretrizes.
    testes unitários de identidade, revisão e não-herança de autorização.
 3. Criar migration aditiva para necessidades, referências e vínculo com `articles`; implementar
    writer service-only idempotente e testes de RLS.
-4. Criar acquisitions/anchors com modo `not_stored` e inline limitado; validar checksums e falhas
-   transacionais antes de habilitar Storage.
-5. Criar claim revisions e authorization events append-only, API de revisão derivando reviewer da
-   sessão e projeção de claims autorizados.
+4. Criar attempts separados e acquisitions/anchors apenas com conteúdo verificável, inicialmente
+   inline e limitado; validar checksums e falhas transacionais antes de habilitar Storage.
+5. Criar claim revisions e authorization events encadeados append-only, API de revisão derivando
+   reviewer da sessão e projeção reconstruível de claims autorizados.
 6. Criar observations e snapshots de reuse; conectar o avaliador determinístico sem conceder
    autorização automática.
 7. Se aprovado, criar bucket privado, fluxo temporário/ready, reconciliador, retenção e testes reais
