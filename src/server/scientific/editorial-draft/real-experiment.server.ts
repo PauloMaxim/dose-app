@@ -49,6 +49,12 @@ export interface ExperimentModelConfiguration {
   reasoning: { mode: "standard"; effort: "medium" };
 }
 
+export interface VerifiedAccountFunding {
+  availableUsd: number;
+  sourceUrl: string;
+  checkedAt: string;
+}
+
 export interface EditorialExperimentProtocol {
   experimentId: typeof EDITORIAL_REAL_EXPERIMENT_ID;
   budgetUsd: typeof EDITORIAL_REAL_EXPERIMENT_BUDGET_USD;
@@ -57,6 +63,7 @@ export interface EditorialExperimentProtocol {
   retries: 0;
   timeoutMs: typeof EDITORIAL_REAL_EXPERIMENT_TIMEOUT_MS;
   maxOutputTokens: typeof EDITORIAL_REAL_EXPERIMENT_MAX_OUTPUT_TOKENS;
+  accountFunding: VerifiedAccountFunding | null;
   models: readonly [ExperimentModelConfiguration, ExperimentModelConfiguration];
 }
 
@@ -69,6 +76,7 @@ export const PMID_42717033_REAL_EXPERIMENT_PROTOCOL: EditorialExperimentProtocol
   retries: 0,
   timeoutMs: EDITORIAL_REAL_EXPERIMENT_TIMEOUT_MS,
   maxOutputTokens: EDITORIAL_REAL_EXPERIMENT_MAX_OUTPUT_TOKENS,
+  accountFunding: null,
   models: [
     {
       label: "sol",
@@ -246,6 +254,20 @@ export function preflightPmid42717033RealExperiment(
     ? calls.reduce((sum, call) => sum + (call.estimatedMaximumCostUsd ?? 0), 0)
     : null;
   const blockers = calls.flatMap((call) => call.blockers);
+  const parsedFunding = verificationSchema
+    .extend({ availableUsd: z.number().finite().nonnegative() })
+    .strict()
+    .safeParse(protocol.accountFunding);
+  if (
+    !parsedFunding.success ||
+    !validPastOrPresentDate(parsedFunding.success ? parsedFunding.data.checkedAt : null, now)
+  )
+    blockers.push("account balance or spend capacity is unverified, invalid, or future-dated");
+  else if (
+    estimatedMaximumCostUsd !== null &&
+    parsedFunding.data.availableUsd < estimatedMaximumCostUsd
+  )
+    blockers.push("verified account spend capacity is below the combined conservative maximum");
   if (
     protocol.maxCallsTotal !== 2 ||
     protocol.maxCallsPerModel !== 1 ||

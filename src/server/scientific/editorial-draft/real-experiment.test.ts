@@ -43,6 +43,7 @@ function protocol(
     retries: 0,
     timeoutMs: 90_000,
     maxOutputTokens: 8_000,
+    accountFunding: { availableUsd: 1, ...verification },
     models: [
       {
         label: "sol",
@@ -152,6 +153,7 @@ test("preflight fails closed for unknown identifiers, prices, capabilities, and 
   assert.match(result.blockers.join(" "), /pricing is unknown/);
   assert.match(result.blockers.join(" "), /availability date/);
   assert.match(result.blockers.join(" "), /compatibility is unverified/);
+  assert.match(result.blockers.join(" "), /balance or spend capacity is unverified/);
 });
 
 test("preflight exposes immutable exact requests and rejects combined budget excess", () => {

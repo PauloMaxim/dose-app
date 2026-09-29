@@ -91,12 +91,13 @@ source scopes, and context allowlists here; never transcribe or reconstruct them
 ### Verification status and blocking pendencies
 
 The official OpenAI [API pricing page](https://openai.com/api/pricing/) and
-[model documentation](https://platform.openai.com/docs/models) were consulted on **2026-09-29**, but
-the preparation environment could not retrieve either page (HTTP tunnel 403). No official identifier
-or price could therefore be verified from those sources. Account-specific availability was also not
-verified because this preparation is expressly offline and must not use a credential or contact an
-API. In particular, the legacy code default `gpt-6-sol` is **not** evidence that Sol is available and
-must not be copied into this sheet as a verified identifier.
+[model documentation](https://platform.openai.com/docs/models) were consulted again on
+**2026-09-29**, but the preparation environment could not retrieve either page (HTTP tunnel 403), and
+the available web lookup also returned HTTP 401. No official identifier, price, or capability could
+therefore be verified from those sources. `OPENAI_API_KEY` was not present, so no credentialed account
+availability check was attempted. In particular, model defaults or names already present in code are
+**not** evidence that Sol or Luna is available and must not be copied into this sheet as verified
+identifiers.
 
 Consequently, both checked-in model identifiers, price records, and account-availability timestamps
 are `null`; the real preflight fails closed. A future operator must fill them from current official
@@ -113,6 +114,9 @@ the official URL and UTC consultation timestamp. Until that happens, **execution
 | Official source URL                      | PENDING — blocked | PENDING — blocked |
 | Strict-schema/reasoning compatibility    | PENDING — blocked | PENDING — blocked |
 | Price/availability/capability checked at | PENDING — blocked | PENDING — blocked |
+
+The account balance or spend capacity sufficient for the combined conservative maximum is also
+**PENDING — blocked**. Model-list availability does not prove funding, quota, or permission to spend.
 
 ### Fixed shared conditions
 
@@ -169,9 +173,14 @@ surface outside the execution session must collect an identified human's explici
 construct the record immediately before that individual call. Merely instantiating the session or
 calling `run()` is not authorization.
 
-No operator-controlled authorization surface has been provisioned in this phase. The confirmation
-type is only a validation contract and cannot, by itself, prove that a human performed the required
-action. Execution remains blocked until that restricted surface exists and its behavior is reviewed.
+The server-only command `npm run experiment:editorial -- execute` is the restricted operator surface;
+it is not an HTTP route. It prints the selected model, exact request hash and conservative maximum
+cost, then requires the identified operator to type the complete attestation immediately before the
+session can claim an attempt. It accepts no confirmation flag or piped confirmation argument. The
+default checked-in protocol remains blocked, so merely running the command cannot make a provider
+call. A future reviewed protocol file is supplied with `--protocol`, and execution additionally
+requires an explicit `--model sol|luna`, `--operator <id>`, `--ledger <shared-path>`, and the
+server-only `OPENAI_API_KEY` environment variable.
 
 | Call | Human/operator ID | Confirmation ID | UTC timestamp | Exact model ID | Confirm immediately before call |
 | ---- | ----------------- | --------------- | ------------- | -------------- | ------------------------------- |
@@ -181,11 +190,14 @@ action. Execution remains blocked until that restricted surface exists and its b
 The session returns the **normalized transport response** retained by the existing adapter—not a claim
 that the complete original HTTP envelope/body was preserved—plus provider usage/response metadata,
 client-measured duration, deterministic-validation result, and the separate conservative cost. The
-provider-reported cost remains a distinct nullable field and is never inferred from the estimate.
-Capture is in memory only: there is no endpoint, filesystem writer, Supabase persistence, feed,
-preview, publication, or automatic export. The operator must place any approved private records only
-in the restricted experiment storage defined outside this repository and then use the Phase 1.9A
-offline laboratory for comparison and blinded review.
+provider-reported cost remains a distinct nullable field and is never inferred from the estimate. The
+operator command requires `--capture <private-path>` before confirmation or transport entry. That
+existing directory must be outside the repository and every production surface; it is restricted to
+mode `0700`, and each capture is atomically created without overwrite at mode `0600`. The private
+record contains the normalized response and validation result required by the Phase 1.9A offline
+laboratory plus experiment/case/request/model identities and metrics. It contains no API key, and the
+terminal prints only operational metadata and the private path—not scientific response content. A
+post-call write failure leaves the ledger claim consumed and must never trigger a retry.
 
 ### Attempt ledger and session restarts
 
@@ -197,14 +209,51 @@ the two-attempt experiment ceiling before the provider transport is entered. The
 even when the call times out, fails, or returns incomplete output; `complete` records only its eventual
 outcome and never releases the slot.
 
-For the controlled run, provision an access-restricted, append-only experiment record outside product
-storage, reviewed by the operator before either call. It must not be a public endpoint, production
-Supabase table, feed integration, or repository file. Both sessions must use the same ledger instance
-or backend. Record only experiment/case/model/request/confirmation identities, timestamps and outcome;
-never credentials or private response content. If an atomic shared ledger is unavailable, execution
-remains blocked. The repository supplies only the ledger contract because selecting or provisioning a
-real operational store was not authorized in Phase 1.9B.
+For the controlled run, the required `--ledger` path must be access-restricted durable storage shared
+by every operator process, outside product storage and outside the repository. The supplied filesystem
+ledger serializes claims with an atomic directory lock, writes the permanent claim and syncs it before
+allowing transport entry, and never deletes claims after failure, timeout, or restart. An abandoned or
+unreadable lock fails closed and requires human inspection; it is never automatically declared stale.
+Records contain only experiment/case/model/request/confirmation identities, timestamps and outcome,
+never credentials or private response content. A local temporary path, an in-memory implementation,
+or a path not shared by every possible runner does not satisfy the protocol and does not authorize
+execution.
 
-Likewise, `RestrictedExperimentAttemptLedger` is only a contract: no real shared ledger backend has
-been provisioned. Supplying an ad hoc in-memory implementation does not establish a cross-process
-limit and does not authorize execution.
+### Restricted operational commands
+
+1. `npm run experiment:editorial -- preflight --protocol <reviewed-protocol.json>` prints the frozen
+   case, both model IDs, request hashes, per-call maxima, combined maximum, and every blocker. The
+   combined conservative maximum must be at most US$ 1.00. A blocked result exits nonzero after
+   printing every blocker, so it cannot be treated as a successful automation gate.
+2. After exact IDs are established from official documentation, an authorized operator may run
+   `npm run experiment:editorial -- availability --protocol <reviewed-protocol.json>`. This performs
+   only `GET /v1/models`, reports whether each exact ID was returned for the account, and never prints
+   the credential. It does not establish balance or quota; those remain blocking unless independently
+   confirmed through an authorized account surface and recorded in the protocol's `accountFunding`
+   evidence with an official HTTPS source and UTC timestamp.
+3. Only after the protocol, shared ledger location and preflight have been reviewed, run one model at
+   a time with `npm run experiment:editorial --` followed by the `execute` command, reviewed protocol,
+   one model, identified operator, shared ledger and private capture paths. The two paid calls were
+   **not** executed while preparing this tooling.
+
+```text
+execute --protocol <reviewed-protocol.json> --model sol|luna --operator <id> --ledger <shared-path> --capture <private-path>
+```
+
+### Offline capture adapter
+
+`adaptRestrictedCaptureToRecordedEditorialResponse()` performs the deterministic, I/O-free projection
+into the Phase 1.9A laboratory contract. Experiment ID, case ID/fingerprint and model ID map directly.
+The adapter parses the unchanged normalized `output_text` JSON as the laboratory response, maps only
+complete provider-reported input/output token counts, records the already client-measured duration as
+latency, and leaves cost `null`: the captured conservative maximum is a ceiling, not observed spend.
+The fixed 1.9B request conditions supply the explicit OpenAI provider, 8,000-token output limit, strict
+v5 format, no additional instructions, and `standard`/`medium` reasoning configuration.
+
+The laboratory does not accept operational fields such as request hash, confirmation ID, label,
+timestamps, maximum-cost ceiling, normalized envelope, or the first-pass validation result; those
+remain in the private capture for audit and are not smuggled into its strict input contract. The
+laboratory independently repeats deterministic validation over the parsed original response. Failed,
+incomplete, wrong-case, or non-JSON captures are rejected. Provenance is a required adapter argument,
+so offline tests must explicitly use `synthetic_test_fixture`; only an actual captured provider call
+may be identified as `recorded_model_output`.
