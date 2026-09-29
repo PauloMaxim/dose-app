@@ -17,6 +17,7 @@ import {
   CONTEXTUAL_REFERENCE_REUSE_EVALUATION_VERSION,
   evaluateContextualReferenceReuse,
   type ContextualReferenceReusePolicy,
+  type ContextualReferenceReuseReasonCode,
   type EvaluateContextualReferenceReuseInput,
   type VerifiedSourceObservation,
 } from "./contextual-reference-reuse";
@@ -206,6 +207,7 @@ test("exact identity is required and title similarity never establishes equivale
 test("conflicting DOI, PMID, and PMCID identities block reuse", () => {
   for (const scheme of ["doi", "pmid", "pmcid"] as const) {
     const values = { doi: "10.0000/synthetic", pmid: "100", pmcid: "PMC100" };
+    const conflictingValues = { doi: "10.0000/conflict", pmid: "101", pmcid: "PMC101" };
     const schemeReference = {
       ...reference,
       id: `reference:synthetic-${scheme}`,
@@ -214,8 +216,8 @@ test("conflicting DOI, PMID, and PMCID identities block reuse", () => {
     const result = evaluate({
       reference: schemeReference,
       bibliographicCandidate: candidate({
-        canonicalIdentifier: { scheme, value: `${values[scheme]}-conflict` },
-        identifiers: { ...values, [scheme]: `${values[scheme]}-conflict` },
+        canonicalIdentifier: { scheme, value: conflictingValues[scheme] },
+        identifiers: { ...values, [scheme]: conflictingValues[scheme] },
       }),
       acquisition: { ...acquisition, externalContextReferenceId: schemeReference.id },
       verifiedObservations: [],
@@ -223,6 +225,46 @@ test("conflicting DOI, PMID, and PMCID identities block reuse", () => {
     assert.equal(result.state, "reuse_blocked", scheme);
     assert.ok(result.reasonCodes.includes("BIBLIOGRAPHIC_IDENTITY_CONFLICT"), scheme);
   }
+});
+
+test("PMID and PMCID references match a DOI-canonical candidate through exact identifiers", () => {
+  for (const scheme of ["pmid", "pmcid"] as const) {
+    const value = scheme === "pmid" ? "100" : "PMC100";
+    const schemeReference = {
+      ...reference,
+      id: `reference:synthetic-${scheme}-match`,
+      canonicalIdentifier: { scheme, value },
+    };
+    const schemeAcquisition = {
+      ...acquisition,
+      externalContextReferenceId: schemeReference.id,
+    };
+    const schemeObservation = observation({
+      id: `observation:synthetic-${scheme}-match`,
+      referenceId: schemeReference.id,
+    });
+    const result = evaluate({
+      reference: schemeReference,
+      acquisition: schemeAcquisition,
+      bibliographicCandidate: candidate(),
+      verifiedObservations: [schemeObservation],
+    });
+    assert.equal(result.state, "candidate_for_reuse_with_human_review", scheme);
+    assert.equal(result.externalSourceCurrency, "confirmed_current", scheme);
+    assert.equal(result.reasonCodes.includes("BIBLIOGRAPHIC_IDENTITY_CONFLICT"), false, scheme);
+  }
+
+  const missingPmid = evaluate({
+    reference: {
+      ...reference,
+      canonicalIdentifier: { scheme: "pmid", value: "100" },
+    },
+    bibliographicCandidate: candidate({
+      identifiers: { doi: "10.0000/synthetic", pmid: null, pmcid: "PMC100" },
+    }),
+  });
+  assert.ok(missingPmid.reasonCodes.includes("BIBLIOGRAPHIC_IDENTITY_UNCONFIRMED"));
+  assert.equal(missingPmid.reasonCodes.includes("BIBLIOGRAPHIC_IDENTITY_CONFLICT"), false);
 });
 
 test("source version divergence and explicit age policy require reverification", () => {
@@ -328,6 +370,53 @@ test("contradictory recent observations fail closed regardless of ordering", () 
   assert.ok(forward.reasonCodes.includes("SOURCE_CHANGED"));
 });
 
+test("recent integrity conflicts prevent confirmed current regardless of observation order", () => {
+  const conflicts: Array<{
+    name: string;
+    observation: VerifiedSourceObservation;
+    reason: ContextualReferenceReuseReasonCode;
+    expectedState: "reuse_blocked" | "update_or_reverification_required";
+  }> = [
+    {
+      name: "checksum",
+      observation: observation({
+        id: "observation:checksum-conflict",
+        declaredSourceChecksum: "f".repeat(64),
+      }),
+      reason: "CHECKSUM_CHANGED",
+      expectedState: "reuse_blocked",
+    },
+    {
+      name: "anchors",
+      observation: observation({
+        id: "observation:anchors-conflict",
+        declaredAnchorsIntegrity: "invalid",
+      }),
+      reason: "ANCHORS_INVALID",
+      expectedState: "reuse_blocked",
+    },
+    {
+      name: "version",
+      observation: observation({
+        id: "observation:version-conflict",
+        sourceVersion: "version-2",
+      }),
+      reason: "SOURCE_VERSION_CHANGED",
+      expectedState: "update_or_reverification_required",
+    },
+  ];
+
+  for (const conflict of conflicts) {
+    const observations = [observation({ id: "observation:complete" }), conflict.observation];
+    const forward = evaluate({ verifiedObservations: observations });
+    const reverse = evaluate({ verifiedObservations: [...observations].reverse() });
+    assert.deepEqual(forward, reverse, conflict.name);
+    assert.equal(forward.externalSourceCurrency, "unconfirmed", conflict.name);
+    assert.equal(forward.state, conflict.expectedState, conflict.name);
+    assert.ok(forward.reasonCodes.includes(conflict.reason), conflict.name);
+  }
+});
+
 test("known content changes, invalid checksum, and invalid anchors block reuse", () => {
   const changed = evaluate({
     verifiedObservations: [
@@ -382,6 +471,18 @@ test("future dates fail closed and invalid dates are rejected by input contracts
     acquisition: { ...acquisition, retrievedAt: "not-a-date" },
   });
   assert.ok(invalidAcquisition.reasonCodes.includes("ACQUISITION_ARTIFACT_INVALID"));
+});
+
+test("structurally malformed acquisitions are blocked without evaluating anchor fields", () => {
+  const malformed = {
+    id: acquisition.id,
+    externalContextReferenceId: acquisition.externalContextReferenceId,
+  } as unknown as ExternalContextAcquisition;
+  const result = evaluate({ acquisition: malformed, verifiedObservations: [] });
+  assert.equal(result.state, "reuse_blocked");
+  assert.equal(result.evidenceAssessment.localAcquisitionIntegrity, "invalid");
+  assert.equal(result.evidenceAssessment.localAnchorIntegrity, "not_evaluated");
+  assert.ok(result.reasonCodes.includes("ACQUISITION_ARTIFACT_INVALID"));
 });
 
 test("contextual need identity preserves article isolation", () => {

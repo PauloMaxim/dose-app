@@ -129,7 +129,7 @@ export const contextualReferenceReuseEvaluationSchema = z
     evidenceAssessment: z
       .object({
         localAcquisitionIntegrity: z.enum(["valid", "invalid", "not_available"]),
-        localAnchorIntegrity: z.enum(["valid", "invalid", "not_available"]),
+        localAnchorIntegrity: z.enum(["valid", "invalid", "not_evaluated", "not_available"]),
         externalObservationEvidence: z.enum(["sufficient", "insufficient", "not_available"]),
       })
       .strict(),
@@ -269,18 +269,29 @@ export function evaluateContextualReferenceReuse(
         referenceScheme,
         reference.canonicalIdentifier.value,
       );
-      const canonicalMatches =
-        referenceScheme === candidate.canonicalIdentifier.scheme &&
-        referenceValue ===
-          normalizeIdentifier(
-            candidate.canonicalIdentifier.scheme,
-            candidate.canonicalIdentifier.value,
-          );
-      const identifierConflicts = (["doi", "pmid", "pmcid"] as const).some((scheme) => {
-        if (referenceScheme !== scheme || !candidate.identifiers[scheme]) return false;
-        return referenceValue !== normalizeIdentifier(scheme, candidate.identifiers[scheme]);
-      });
-      if (!canonicalMatches || identifierConflicts) reasons.add("BIBLIOGRAPHIC_IDENTITY_CONFLICT");
+      if (["doi", "pmid", "pmcid"].includes(referenceScheme)) {
+        const scheme = referenceScheme as "doi" | "pmid" | "pmcid";
+        const candidateValue = normalizeIdentifier(scheme, candidate.identifiers[scheme]);
+        const sameSchemeCanonicalValue =
+          candidate.canonicalIdentifier.scheme === scheme
+            ? normalizeIdentifier(scheme, candidate.canonicalIdentifier.value)
+            : null;
+        if (!candidateValue) reasons.add("BIBLIOGRAPHIC_IDENTITY_UNCONFIRMED");
+        else if (
+          candidateValue !== referenceValue ||
+          (sameSchemeCanonicalValue !== null && sameSchemeCanonicalValue !== referenceValue)
+        )
+          reasons.add("BIBLIOGRAPHIC_IDENTITY_CONFLICT");
+      } else {
+        const canonicalMatches =
+          referenceScheme === candidate.canonicalIdentifier.scheme.toLowerCase() &&
+          referenceValue ===
+            normalizeIdentifier(
+              candidate.canonicalIdentifier.scheme,
+              candidate.canonicalIdentifier.value,
+            );
+        if (!canonicalMatches) reasons.add("BIBLIOGRAPHIC_IDENTITY_CONFLICT");
+      }
     }
   } else reasons.add("BIBLIOGRAPHIC_IDENTITY_UNCONFIRMED");
 
@@ -386,9 +397,21 @@ export function evaluateContextualReferenceReuse(
       observation.externalVerification.comparedContentScope === acquisition.contentScope &&
       (!reference?.sourceVersion || observation.sourceVersion === reference.sourceVersion),
   );
+  const hasRecentExternalConflict = recentObservations.some(
+    (observation) =>
+      observation.sourceState === "changed" ||
+      observation.declaredAnchorsIntegrity === "invalid" ||
+      (acquisition !== undefined &&
+        observation.declaredSourceChecksum !== null &&
+        observation.declaredSourceChecksum !== acquisition.checksum.value) ||
+      (reference?.sourceVersion !== undefined &&
+        observation.sourceVersion !== null &&
+        observation.sourceVersion !== reference.sourceVersion),
+  );
   if (recentObservations.some(({ sourceState }) => sourceState === "changed"))
     externalSourceCurrency = "known_changed";
-  else if (completeCurrentObservations.length > 0) externalSourceCurrency = "confirmed_current";
+  else if (completeCurrentObservations.length > 0 && !hasRecentExternalConflict)
+    externalSourceCurrency = "confirmed_current";
   else {
     reasons.add("EXTERNAL_CURRENCY_UNCONFIRMED");
     if (
@@ -431,9 +454,11 @@ export function evaluateContextualReferenceReuse(
           : "invalid"
         : "not_available",
       localAnchorIntegrity: input.acquisition
-        ? localAnchorsAreValid(input.acquisition)
-          ? "valid"
-          : "invalid"
+        ? acquisition
+          ? localAnchorsAreValid(acquisition)
+            ? "valid"
+            : "invalid"
+          : "not_evaluated"
         : "not_available",
       externalObservationEvidence:
         externalSourceCurrency === "confirmed_current"
